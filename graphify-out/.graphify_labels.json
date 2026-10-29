@@ -1,12 +1,10 @@
 {
   "0": "Task Scheduler Form & Triggers",
   "1": "Advanced Schedule Configuration UI",
-  "2": "Shell Thumbnail Cache Extraction",
   "4": "Application Settings & Properties",
   "6": "Progress Dialog Lifecycle & State",
   "7": "Bulk Preloader & Presets UI",
   "8": "Log Retention & File Cleanup",
-  "9": "Cache Tray Icon & Events",
   "10": "Core Namespaces & Test Suites",
   "11": "About Form & Update Checker",
   "12": "Advanced Cache Settings UI",
@@ -25,7 +23,6 @@
   "26": "Native IProgressDialog COM Interface",
   "27": "Backup Folder Path Validation",
   "28": ".NET 10 Project & Dependencies",
-  "29": "License Form Viewer",
   "30": "Shell Image Factory Flags",
   "32": "Bulk Preset Serialization Model",
   "33": "Advanced Settings Form & Tabs",
@@ -37,7 +34,6 @@
   "40": "Log Folder Validation Result",
   "41": "Shared Bitmap COM Interface",
   "42": "Form Close Button Handlers",
-  "43": "Backup Folder Status Enum",
   "45": "Window Long Index Constants",
   "46": "Backup Folder Validation Result",
   "47": "IShellItem COM Interface",
@@ -53,6 +49,5 @@
   "57": "Settings Saving Event Handler",
   "58": "Inno Setup Installer & Docs",
   "59": "Numeric Input Key Press Filter",
-  "60": "Setting Changing Event Handler",
-  "61": "Start Minimized Tray Behavior"
+  "60": "Setting Changing Event Handler"
 }

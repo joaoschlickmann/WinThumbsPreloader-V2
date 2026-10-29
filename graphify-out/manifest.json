@@ -78,9 +78,9 @@
     "semantic_hash": "f9ee3e6e2ff3f0bd673ce6cbdcdabe10"
   },
   "WinThumbsPreloader/WinThumbsPreloader/Forms/CacheForm.cs": {
-    "mtime": 1793286739.20261,
-    "seen": 1793292061.6216233,
-    "ast_hash": "c81b04d5b94e13d19cf228aaf492c7a4",
+    "mtime": 1793295808.9481747,
+    "seen": 1793296009.728836,
+    "ast_hash": "f1b955761844e1efaefd0f914f488529",
     "semantic_hash": ""
   },
   "WinThumbsPreloader/WinThumbsPreloader/Forms/LicenseForm.Designer.cs": {
@@ -138,10 +138,10 @@
     "semantic_hash": "f811f3eec66fc864fae1013b14ad7e5c"
   },
   "WinThumbsPreloader/WinThumbsPreloader/Program.cs": {
-    "mtime": 1793275176.900026,
-    "seen": 1793276950.816165,
-    "ast_hash": "f98c2261b17ba4daa7a78cdd0d20f0ea",
-    "semantic_hash": "f98c2261b17ba4daa7a78cdd0d20f0ea"
+    "mtime": 1793295843.238764,
+    "seen": 1793296009.728847,
+    "ast_hash": "3848b1cc51f37862f907cf2707dd4987",
+    "semantic_hash": ""
   },
   "WinThumbsPreloader/WinThumbsPreloader/ProgressDialog.cs": {
     "mtime": 1793281134.165653,
@@ -180,15 +180,15 @@
     "semantic_hash": "2dbf60c86a8d739c7f4726295a0f7b53"
   },
   "WinThumbsPreloader/WinThumbsPreloader/ThumbnailPreloader.cs": {
-    "mtime": 1793286498.0739148,
-    "seen": 1793292061.6216443,
-    "ast_hash": "5bbe278378d759ff5b1c77153bb0d36b",
+    "mtime": 1793295752.8943312,
+    "seen": 1793296009.7288551,
+    "ast_hash": "e44eadf82efa4b3382ddacc0286dcdd3",
     "semantic_hash": ""
   },
   "WinThumbsPreloader/WinThumbsPreloader/ThumbnailsPreloader.cs": {
-    "mtime": 1793286825.424256,
-    "seen": 1793292061.621646,
-    "ast_hash": "dc43ff3aa398522342a617b0c25d86ec",
+    "mtime": 1793295970.491694,
+    "seen": 1793296009.728856,
+    "ast_hash": "a42201c2430afb332aa7c38c26cc78a1",
     "semantic_hash": ""
   },
   "WinThumbsPreloader/WinThumbsPreloader/WinThumbsPreloader.csproj": {
@@ -264,9 +264,9 @@
     "semantic_hash": "b45a52113803d3b16fc1ca789ef7385e"
   },
   "WinThumbsPreloader/WinThumbsPreloader.Tests/PreloaderPipelineIntegrationTests.cs": {
-    "mtime": 1793286861.7708642,
-    "seen": 1793292061.6216016,
-    "ast_hash": "8053fb6af3e4d2e84772c6b68260c141",
+    "mtime": 1793295947.1501224,
+    "seen": 1793296009.7288163,
+    "ast_hash": "4014e5b3e641739face45dc43c55c276",
     "semantic_hash": ""
   },
   "WinThumbsPreloader/WinThumbsPreloader.Tests/WinThumbsPreloader.Tests.csproj": {
