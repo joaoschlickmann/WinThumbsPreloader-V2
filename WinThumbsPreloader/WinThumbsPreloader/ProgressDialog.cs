@@ -181,8 +181,10 @@ namespace WinThumbsPreloader
             }
             set
             {
+                if (_maximum == value)
+                    return;
                 _maximum = value;
-                if (_state != ProgressDialogState.Stopped) UpdateProgress();
+                if (_state != ProgressDialogState.Stopped && _value > 0) UpdateProgress();
             }
         }
         /// <summary>
@@ -203,6 +205,20 @@ namespace WinThumbsPreloader
                     UpdateProgress();
                     if (_autoClose && (_value >= _maximum)) Close();
                 }
+            }
+        }
+
+        /// <summary>
+        /// Atomically updates both completed value and maximum in a single native IProgressDialog::SetProgress call.
+        /// </summary>
+        public void SetProgress(int value, int maximum)
+        {
+            _value = value;
+            _maximum = maximum;
+            if (_state != ProgressDialogState.Stopped)
+            {
+                UpdateProgress();
+                if (_autoClose && (_value >= _maximum)) Close();
             }
         }
         /// <summary>

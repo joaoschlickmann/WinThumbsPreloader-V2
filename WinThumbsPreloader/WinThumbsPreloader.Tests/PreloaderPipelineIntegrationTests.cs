@@ -156,5 +156,76 @@ namespace WinThumbsPreloader.Tests
             Assert.Equal(ThumbnailsPreloader.ThumbnailsPreloaderState.Done, preloader.state);
             Assert.Equal(0, Volatile.Read(ref Program.activeInstances));
         }
+
+        [Fact]
+        public void ThumbnailPreloader_ConcurrentStaWorkers_SimultaneousShellParse_DoesNotRaceOrFault()
+        {
+            // Arrange: Regression test for 0xC0000005 access violation when 20 STA threads
+            // simultaneously enter GetOrCreateParentShellItem -> SHCreateItemFromParsingName.
+            const int workerCount = 20;
+            string sampleFile = CreateSampleBitmapFile("concurrent_parse.bmp");
+            var item = new ScannedItem(sampleFile, _tempDir, "concurrent_parse.bmp", IsDirectory: false, IsNetworkPath: true);
+            using var startGate = new ManualResetEventSlim(false);
+            var threads = new Thread[workerCount];
+            Exception? capturedError = null;
+
+            for (int i = 0; i < workerCount; i++)
+            {
+                threads[i] = new Thread(() =>
+                {
+                    try
+                    {
+                        startGate.Wait();
+                        ThumbnailPreloader.PreloadThumbnail(in item, [96, 256]);
+                    }
+                    catch (Exception ex)
+                    {
+                        Interlocked.CompareExchange(ref capturedError, ex, null);
+                    }
+                    finally
+                    {
+                        ThumbnailPreloader.CleanupCurrentThreadComObjects();
+                    }
+                })
+                {
+                    IsBackground = true
+                };
+                threads[i].SetApartmentState(ApartmentState.STA);
+                threads[i].Start();
+            }
+
+            // Act: release all 20 STA threads simultaneously
+            startGate.Set();
+            foreach (var t in threads)
+                t.Join();
+
+            // Assert
+            Assert.Null(capturedError);
+        }
+
+        [Fact]
+        public void ProgressDialog_SetProgress_UpdatesValueAndMaximumAtomically()
+        {
+            using var dialog = new ProgressDialog();
+            dialog.SetProgress(825, 5173);
+
+            Assert.Equal(825, dialog.Value);
+            Assert.Equal(5173, dialog.Maximum);
+        }
+
+        [Fact]
+        public void CacheForm_UpdateTimerTick_AfterFormDisposed_DoesNotThrowNullReferenceException()
+        {
+            var form = new CacheForm();
+            var tickMethod = typeof(CacheForm).GetMethod(
+                "UpdateTimer_Tick",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.NotNull(tickMethod);
+
+            form.Dispose();
+
+            var ex = Record.Exception(() => tickMethod!.Invoke(form, [null, EventArgs.Empty]));
+            Assert.Null(ex);
+        }
     }
 }

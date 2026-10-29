@@ -142,7 +142,7 @@ namespace WinThumbsPreloader
 
         private void DefaultExtensionsButton_Click(object sender, EventArgs e)
         {
-            Settings.Default.ExtensionsText = "avi, avif, bmp, gif, heic, heif, jpg, jpeg, mkv, mov, mp4, png, svg, tif, tiff, webp";
+            Settings.Default.ExtensionsText = "ai, avi, avif, bmp, gif, heic, heif, jpg, jpeg, mkv, mov, mp4, png, psb, psd, svg, tif, tiff, webp";
             ExtensionsTextBox.Text = Settings.Default.ExtensionsText;
             WriteLine("Default extensions applied", LoggingFrequency.DebugLogging);
             UpdateExtensionsTextBoxDisplay();

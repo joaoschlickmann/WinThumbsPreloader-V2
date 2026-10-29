@@ -122,6 +122,10 @@ Root: "HKCR"; Subkey: "Drive\shell\{#MyAppName}\Shell\PreloadRecursively\command
 
 Root: "HKLM"; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: not IsInPath(ExpandConstant('{app}'))
 
+; ---- Prevent Windows Automatic Maintenance (SilentCleanup) from wiping the thumbnail cache ----
+Root: "HKLM"; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\Thumbnail Cache"; ValueType: dword; ValueName: "Autorun"; ValueData: "0"
+Root: "HKLM"; Subkey: "SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\Thumbnail Cache"; ValueType: dword; ValueName: "Autorun"; ValueData: "0"
+
 [Code]
 function IsInPath(Dir: string): Boolean;
 var

@@ -280,35 +280,47 @@ namespace WinThumbsPreloader
 
         private async void UpdateTimer_Tick(object sender, EventArgs e)
         {
+            if (IsDisposed || Disposing || updateTimer == null)
+                return;
+
             UpdateCacheSizeLabels();
             if (AlertCheckBox.Checked == true)
             {
                 updateTimer.Stop();
                 await AboutForm.CheckForCacheReset(true, false);
-                updateTimer.Start();
+                if (!IsDisposed && !Disposing)
+                    updateTimer?.Start();
             }
         }
 
         private async void AutoBackupThumbsCache_Tick(object sender, EventArgs e)
         {
+            if (IsDisposed || Disposing || autoBackupTimer == null)
+                return;
+
             autoBackupTimer.Stop();
             if (AutoBackupCheckBox.Checked && TryGetBackupPath(out _) && ExplorerCacheSize() > BackupCacheSize())
             {
                 WriteLine("Auto-backup triggered", LoggingFrequency.DebugLogging);
                 await BackupThumbsCacheAsync(null);
             }
-            autoBackupTimer.Start();
+            if (!IsDisposed && !Disposing)
+                autoBackupTimer?.Start();
         }
 
         private async void AutoRestoreThumbsCache_Tick(object sender, EventArgs e)
         {
+            if (IsDisposed || Disposing || autoRestoreTimer == null)
+                return;
+
             autoRestoreTimer.Stop();
             if (AutoRestoreCheckBox.Checked && BackupCacheSize() > ExplorerCacheSize())
             {
                 WriteLine("Auto-restore triggered", LoggingFrequency.DebugLogging);
                 await RestoreThumbsCache(progressBarRestore, false);
             }
-            autoRestoreTimer.Start();
+            if (!IsDisposed && !Disposing)
+                autoRestoreTimer?.Start();
         }
 
         public static event EventHandler BackupInfoChanged;
@@ -2723,7 +2735,7 @@ namespace WinThumbsPreloader
 
         private void CheckForStartMinimized(object sender, EventArgs e)
         {
-            if (Program.AppOptions.startMinimized) { StartMinimized(null, null); }
+            if (Program.AppOptions?.startMinimized == true) { StartMinimized(null, null); }
         }
 
         private void StartMinimized(object sender, EventArgs e)

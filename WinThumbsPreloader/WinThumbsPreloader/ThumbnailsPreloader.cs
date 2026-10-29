@@ -227,12 +227,11 @@ namespace WinThumbsPreloader
                 }
 
                 progressDialog.Line1 = String.Format(Resources.ThumbnailsPreloader_PreloadingThumbnailsFor0Items, totalItemsCount);
-                progressDialog.Maximum = safeTotal;
                 int percent = Math.Clamp((int)((processedItemsCount * 100L) / safeTotal), 0, 100);
                 progressDialog.Title = String.Format(Resources.ThumbnailsPreloader_Processing, percent);
                 progressDialog.Line2 = Resources.ThumbnailsPreloader_Name + ": " + Path.GetFileName(Volatile.Read(ref currentFile));
                 progressDialog.Line3 = String.Format(Resources.ThumbnailsPreloader_ItemsRemaining, Math.Max(0, totalItemsCount - processedItemsCount));
-                progressDialog.Value = Math.Min(processedItemsCount, safeTotal);
+                progressDialog.SetProgress(Math.Min(processedItemsCount, safeTotal), safeTotal);
             }
             else if (state == ThumbnailsPreloaderState.Done)
             {
@@ -251,12 +250,14 @@ namespace WinThumbsPreloader
                         doneCompletedAtSet = true;
                     }
                     totalItemsCount = directoryScanner.totalItemsCount;
+                    int safeDoneTotal = Math.Max(1, totalItemsCount);
+                    progressDialog.Marquee = false;
                     progressDialog.Title = String.Format(Resources.ThumbnailsPreloader_Processing, 100);
                     progressDialog.Line1 = $"Preloading completed for {totalItemsCount:N0} items";
                     string displayPath = ShortenPath(path, 56);
                     progressDialog.Line2 = "Path: \"" + displayPath + "\"";
                     progressDialog.Line3 = $"Finished preloading {processedItemsCount:N0} items in {preloaderElapsedSeconds:N2} seconds.";
-                    progressDialog.Value = progressDialog.Maximum;
+                    progressDialog.SetProgress(safeDoneTotal, safeDoneTotal);
 
                     bool backupAttempted = false;
                     bool waitedAfterBackup = false;

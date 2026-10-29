@@ -26,6 +26,12 @@ namespace WinThumbsPreloader
         private static readonly Lazy<Type?> ThumbnailCacheComType = new(() =>
             Type.GetTypeFromCLSID(CLSID_LocalThumbnailCache, throwOnError: false));
 
+        // Synchronizes full-path SHCreateItemFromParsingName calls and ensures one-time local drive
+        // shell extension initialization (prevents third-party Drive FolderExtensions such as
+        // ExplorerPatcher from racing on IAT patching when multiple STA workers start on a network drive).
+        private static readonly object ShellParseLock = new();
+        private static bool _shellWarmupDone;
+
         // Per-thread LRU cache of parent directory IShellItem instances (avoids re-parsing deep paths or SMB shares per file)
         private static readonly ThreadLocal<Dictionary<string, IShellItem>> ThreadLocalParentItems =
             new ThreadLocal<Dictionary<string, IShellItem>>(() => new Dictionary<string, IShellItem>(StringComparer.OrdinalIgnoreCase));
@@ -267,26 +273,23 @@ namespace WinThumbsPreloader
                         continue;
                     }
 
-                    // 2. For local paths, try fast in-proc extraction first; for network paths or if in-proc fails, use WTS_EXTRACT
-                    if (!isNetworkPath)
-                    {
-                        int hrInProc = tbCache.GetThumbnail(
-                            shellItem,
-                            size,
-                            WTS_FLAGS.WTS_EXTRACTINPROC,
-                            IntPtr.Zero,
-                            out _,
-                            IntPtr.Zero);
+                    // 2. Try fast in-proc extraction first; if in-proc fails, fall back to WTS_EXTRACT
+                    int hrInProc = tbCache.GetThumbnail(
+                        shellItem,
+                        size,
+                        WTS_FLAGS.WTS_EXTRACTINPROC,
+                        IntPtr.Zero,
+                        out _,
+                        IntPtr.Zero);
 
-                        if (hrInProc >= 0)
-                        {
-                            succeeded = true;
-                            Interlocked.Increment(ref ExtractedCount);
-                        }
-                        else if (hrInProc == E_ACCESSDENIED || hrInProc == RPC_E_DISCONNECTED)
-                        {
-                            break;
-                        }
+                    if (hrInProc >= 0)
+                    {
+                        succeeded = true;
+                        Interlocked.Increment(ref ExtractedCount);
+                    }
+                    else if (hrInProc == E_ACCESSDENIED || hrInProc == RPC_E_DISCONNECTED)
+                    {
+                        break;
                     }
 
                     if (!succeeded)
@@ -383,7 +386,22 @@ namespace WinThumbsPreloader
         private static bool TryCreateShellItem(string filePath, out IShellItem? shellItem, out int hr)
         {
             shellItem = null;
-            hr = SHCreateItemFromParsingName(filePath, IntPtr.Zero, IID_IShellItem, out shellItem);
+            lock (ShellParseLock)
+            {
+                if (!_shellWarmupDone)
+                {
+                    _shellWarmupDone = true;
+                    string warmupPath = Environment.SystemDirectory;
+                    if (!string.IsNullOrWhiteSpace(warmupPath) &&
+                        SHCreateItemFromParsingName(warmupPath, IntPtr.Zero, IID_IShellItem, out IShellItem? warmupItem) >= 0 &&
+                        warmupItem != null)
+                    {
+                        try { Marshal.ReleaseComObject(warmupItem); } catch { }
+                    }
+                }
+
+                hr = SHCreateItemFromParsingName(filePath, IntPtr.Zero, IID_IShellItem, out shellItem);
+            }
             return hr >= 0 && shellItem != null;
         }
 

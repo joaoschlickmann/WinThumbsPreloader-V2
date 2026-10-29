@@ -61,6 +61,8 @@ namespace WinThumbsPreloader
         private async void AboutForm_Shown(object sender, EventArgs e)
         {
             await Task.Yield();
+            if (IsDisposed || Disposing)
+                return;
 
             ShowInvalidLaunchPathMessage();
 
@@ -173,6 +175,9 @@ namespace WinThumbsPreloader
                     return UpdateState.Error;
                 }
             });
+
+            if (IsDisposed || Disposing)
+                return;
 
             switch (updateState)
             {
