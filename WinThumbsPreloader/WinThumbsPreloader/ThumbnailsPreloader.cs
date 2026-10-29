@@ -747,10 +747,12 @@ namespace WinThumbsPreloader
             }
         }
 
-        internal static uint[] FilterSaturatedSecondarySizes(uint[] sizes)
+        internal static uint[] FilterSaturatedSecondarySizes(uint[] sizes, Func<uint, long> dbSizeProvider = null)
         {
             if (sizes == null || sizes.Length <= 1)
                 return sizes ?? [256];
+
+            Func<uint, long> getDbSize = dbSizeProvider ?? CacheForm.GetExplorerDbFileSize;
 
             // Always keep the largest requested size (sizes[0], e.g. 256px) because Windows Explorer
             // downscales it in RAM for smaller views. If any secondary smaller database (such as
@@ -760,7 +762,7 @@ namespace WinThumbsPreloader
             for (int i = 1; i < sizes.Length; i++)
             {
                 uint candidate = sizes[i];
-                long dbBytes = CacheForm.GetExplorerDbFileSize(candidate);
+                long dbBytes = getDbSize(candidate);
                 if (dbBytes >= CacheForm.SingleDbSoftLimitBytes)
                 {
                     WriteLine($"WARNING: Skipping saturated secondary thumbnail size {candidate}px (thumbcache_{candidate}.db is {dbBytes / (1024 * 1024)} MB >= {CacheForm.SingleDbSoftLimitBytes / (1024 * 1024)} MB soft limit) to prevent Windows 2 GB cache reset. Larger size {sizes[0]}px remains active.", LoggingFrequency.PreloaderLogging);

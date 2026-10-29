@@ -324,6 +324,79 @@ namespace WinThumbsPreloader.Tests
             // Both 256.db and 768.db are >= 1.6 GB -> spills over to 1280
             Assert.Equal(1280u, ThumbnailPreloader.ResolveSpilloverSize(256, size =>
                 (size == 256 || size == 768) ? softLimit + 1024 : 50L * 1024 * 1024));
+
+            // All buckets saturated -> falls back to requested size without throwing
+            Assert.Equal(256u, ThumbnailPreloader.ResolveSpilloverSize(256, _ => softLimit + 1024));
+        }
+
+        [Fact]
+        public void ThumbnailsPreloader_FilterSaturatedSecondarySizes_DropsOnlySaturatedSecondarySizes()
+        {
+            long softLimit = CacheForm.SingleDbSoftLimitBytes;
+
+            // 96.db is saturated, 256.db and 48.db are not -> drops 96, retains [256, 48]
+            uint[] result = ThumbnailsPreloader.FilterSaturatedSecondarySizes(
+                [256, 96, 48],
+                size => size == 96 ? softLimit : 100L * 1024 * 1024);
+            Assert.Equal([256u, 48u], result);
+
+            // Both 256.db and 96.db are saturated -> retains primary [256] (so it can spill over to 768) and drops 96
+            uint[] bothSaturated = ThumbnailsPreloader.FilterSaturatedSecondarySizes(
+                [256, 96],
+                _ => softLimit + 100);
+            Assert.Equal([256u], bothSaturated);
+        }
+
+        [Fact]
+        public async Task ThumbnailPreloader_SpilloverTo768_SatisfiesSubsequent256And96CacheChecksOnRealWindowsCache()
+        {
+            // Arrange: Create a brand-new 512x512 BMP image that has never been cached
+            string fileName = "spillover_real_com_" + Guid.NewGuid().ToString("N") + ".bmp";
+            string filePath = Path.Combine(_tempDir, fileName);
+            using (var bmp = new Bitmap(512, 512))
+            {
+                using var g = Graphics.FromImage(bmp);
+                g.Clear(Color.MediumSeaGreen);
+                bmp.Save(filePath, ImageFormat.Bmp);
+            }
+
+            var item = new ScannedItem(filePath, _tempDir, fileName, IsDirectory: false, IsNetworkPath: false);
+            var tcs = new TaskCompletionSource<(long firstExtracted, long secondHits, long secondExtracted)>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var staThread = new Thread(() =>
+            {
+                try
+                {
+                    // Pass 1: Extract ONLY into the 768px spillover bucket
+                    ThumbnailPreloader.ResetCounters();
+                    ThumbnailPreloader.PreloadThumbnail(in item, [768]);
+                    long firstExtracted = Interlocked.Read(ref ThumbnailPreloader.ExtractedCount);
+
+                    // Pass 2: Request [256, 96] on the same item and check if 768px satisfies WTS_INCACHEONLY
+                    ThumbnailPreloader.ResetCounters();
+                    ThumbnailPreloader.PreloadThumbnail(in item, [256, 96]);
+                    long secondHits = Interlocked.Read(ref ThumbnailPreloader.CachedHitsCount);
+                    long secondExtracted = Interlocked.Read(ref ThumbnailPreloader.ExtractedCount);
+
+                    ThumbnailPreloader.CleanupCurrentThreadComObjects();
+                    tcs.TrySetResult((firstExtracted, secondHits, secondExtracted));
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+            })
+            {
+                IsBackground = true
+            };
+            staThread.SetApartmentState(ApartmentState.STA);
+            staThread.Start();
+
+            var (pass1Extracted, pass2Hits, pass2Extracted) = await tcs.Task;
+            Assert.Equal(1, pass1Extracted);
+            Assert.Equal(2, pass2Hits);
+            Assert.Equal(0, pass2Extracted);
         }
     }
 }
