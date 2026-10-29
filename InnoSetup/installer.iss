@@ -127,6 +127,9 @@ Root: "HKLM"; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Volume
 Root: "HKLM"; Subkey: "SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\Thumbnail Cache"; ValueType: dword; ValueName: "Autorun"; ValueData: "0"
 Root: "HKCU"; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\Thumbnail Cache"; ValueType: dword; ValueName: "Autorun"; ValueData: "0"
 
+; ---- Start with Windows by default (minimized to system tray) ----
+Root: "HKCU"; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#MyAppName}"; ValueData: """{app}\{#MyAppFilename}"" -startminimized"; Flags: uninsdeletevalue
+
 [Code]
 function IsInPath(Dir: string): Boolean;
 var

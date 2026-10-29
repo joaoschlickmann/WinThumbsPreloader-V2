@@ -1714,6 +1714,34 @@ namespace WinThumbsPreloader
 
             EnsureLocalMachineAutorunDisabled(ThumbnailCacheKey);
             EnsureLocalMachineAutorunDisabled(ThumbnailCacheWow64Key);
+            SyncStartupIfEnabledForCurrentExecutable();
+        }
+
+        private static void SyncStartupIfEnabledForCurrentExecutable()
+        {
+            try
+            {
+                if (!Settings.Default.StartWithWindows)
+                    return;
+
+                string exePath = Application.ExecutablePath;
+                if (string.IsNullOrWhiteSpace(exePath) ||
+                    !Path.GetFileName(exePath).Equals("WinThumbsPreloader.exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                string expectedValue = $"\"{exePath}\" -startminimized";
+                using RegistryKey runKey = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: true);
+                if (runKey != null && !string.Equals(runKey.GetValue(RunKeyName) as string, expectedValue, StringComparison.OrdinalIgnoreCase))
+                {
+                    runKey.SetValue(RunKeyName, expectedValue);
+                }
+            }
+            catch
+            {
+                // Ignore if registry access is restricted
+            }
         }
 
         private static void EnsureLocalMachineAutorunDisabled(string subKeyPath)

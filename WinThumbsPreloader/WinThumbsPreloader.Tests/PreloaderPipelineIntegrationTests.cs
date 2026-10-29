@@ -307,6 +307,12 @@ namespace WinThumbsPreloader.Tests
                 writable: false);
             Assert.NotNull(key);
             Assert.Equal(0, key!.GetValue("Autorun"));
+
+            var prop = typeof(Properties.Settings).GetProperty(nameof(Properties.Settings.StartWithWindows));
+            var defaultAttr = (System.Configuration.DefaultSettingValueAttribute?)Attribute.GetCustomAttribute(
+                prop!, typeof(System.Configuration.DefaultSettingValueAttribute));
+            Assert.NotNull(defaultAttr);
+            Assert.Equal("True", defaultAttr!.Value);
         }
 
         [Fact]
