@@ -35,7 +35,7 @@ namespace WinThumbsPreloader
             Options options = new Options(arguments);
             AppOptions = options;
 
-            WriteLine($"Options: Bad or no arguments = {options.badOrNoArguments}, Include nested directories = {options.includeNestedDirectories}, Multithreaded = {options.multiThreaded}, Silent mode = {options.silentMode}, Start minimized = {options.startMinimized}, Thread count = {options.threadCount}", LoggingFrequency.PreloaderLogging);
+            WriteLine($"Options: Bad or no arguments = {options.badOrNoArguments}, Include nested directories = {options.includeNestedDirectories}, Multithreaded = {options.multiThreaded}, Silent mode = {options.silentMode}, Start minimized = {options.startMinimized}, Thread count = {options.threadCount}, Max parallel instances = {options.maxParallelInstances}", LoggingFrequency.PreloaderLogging);
             WriteLine($"Paths: {string.Join(Environment.NewLine, options.paths)}", LoggingFrequency.PreloaderLogging);
 
             if (!HandleElevationState(arguments))
@@ -66,7 +66,7 @@ namespace WinThumbsPreloader
         {
             formOpen = true;
             Application.EnableVisualStyles();
-            Application.SetHighDpiMode(HighDpiMode.SystemAware); // TODO: or test PerMonitorV2
+            Application.SetHighDpiMode(HighDpiMode.SystemAware);
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new CacheForm());
         }
@@ -92,22 +92,48 @@ namespace WinThumbsPreloader
 
         public static async Task StartPreloadersAsync(Options options)
         {
+            if (options.paths == null || options.paths.Count == 0)
+                return;
+
+            // Reserve all active instances upfront so sequential/throttled execution does not exit early
+            Interlocked.Add(ref activeInstances, options.paths.Count);
+            WriteLine($"Active Instances reserved: {activeInstances}", LoggingFrequency.DebugLogging);
+
+            int maxParallel = options.maxParallelInstances > 0
+                ? options.maxParallelInstances
+                : options.paths.Count;
+
+            using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
             var preloaderTasks = new List<Task>(options.paths.Count);
 
             foreach (string path in options.paths)
             {
-                WriteLine($"exePath: {path}", LoggingFrequency.PreloaderLogging);
-
-                int count = Interlocked.Increment(ref activeInstances);
-
-                WriteLine($"Active Instances: {activeInstances}", LoggingFrequency.DebugLogging);
-
-                var preloader = new ThumbnailsPreloader(path, options.includeNestedDirectories, options.silentMode, options.multiThreaded, options.threadCount);
-
-                preloaderTasks.Add(preloader.StartPreloaderAsync());
+                string currentPath = path;
+                preloaderTasks.Add(RunSinglePathWithThrottleAsync(currentPath, options, semaphore));
             }
 
             await Task.WhenAll(preloaderTasks);
+        }
+
+        private static async Task RunSinglePathWithThrottleAsync(string path, Options options, SemaphoreSlim semaphore)
+        {
+            await semaphore.WaitAsync();
+            try
+            {
+                WriteLine($"exePath: {path}", LoggingFrequency.PreloaderLogging);
+                var preloader = new ThumbnailsPreloader(
+                    path,
+                    options.includeNestedDirectories,
+                    options.silentMode,
+                    options.multiThreaded,
+                    options.threadCount);
+
+                await preloader.StartPreloaderAsync();
+            }
+            finally
+            {
+                semaphore.Release();
+            }
         }
 
         private static bool HandleElevationState(string[] args)
@@ -126,7 +152,7 @@ namespace WinThumbsPreloader
 
         public static bool IsRunningAsAdministrator()
         {
-            var identity = WindowsIdentity.GetCurrent();
+            using var identity = WindowsIdentity.GetCurrent();
             var principal = new WindowsPrincipal(identity);
             var runningAsAdministrator = principal.IsInRole(WindowsBuiltInRole.Administrator);
             WriteLine("Running as administrator: " + runningAsAdministrator, LoggingFrequency.DebugLogging);
@@ -135,16 +161,21 @@ namespace WinThumbsPreloader
 
         public static bool RestartAsAdmin(string[] args)
         {
-            string quotedArgs = string.Join(" ", args.Select(a => $"\"{a}\""));
-
             var psi = new ProcessStartInfo
             {
                 FileName = Application.ExecutablePath,
-                Arguments = quotedArgs,
                 UseShellExecute = true,
                 Verb = "runas",
                 WorkingDirectory = Environment.CurrentDirectory
             };
+
+            if (args != null)
+            {
+                foreach (string arg in args)
+                {
+                    psi.ArgumentList.Add(arg);
+                }
+            }
 
             try
             {
@@ -176,8 +207,6 @@ namespace WinThumbsPreloader
             }
         }
 
-
-
         public static void OpenFormCentered(this Form currentForm, Form newForm)
         {
             WriteLine("Opening form centered", LoggingFrequency.GUILogging);
@@ -193,7 +222,14 @@ namespace WinThumbsPreloader
             newForm.Location = new Point(currentForm.Location.X + (currentForm.Width - newForm.Width) / 2,
                                          currentForm.Location.Y + (currentForm.Height - newForm.Height) / 2);
             newForm.Owner = currentForm;
-            newForm.ShowDialog();
+            try
+            {
+                newForm.ShowDialog();
+            }
+            finally
+            {
+                newForm.Dispose();
+            }
         }
 
         public static void OpenSecondaryFormCentered(this Form currentForm, Form newForm)

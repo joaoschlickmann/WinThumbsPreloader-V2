@@ -16,6 +16,7 @@ namespace WinThumbsPreloader
         public bool invalidPathProvided;
         public string invalidPath = string.Empty;
         public int threadCount;
+        public int maxParallelInstances = 0;
         public List<string> paths = new List<string>();
 
         public Options(string[] arguments)
@@ -35,6 +36,7 @@ namespace WinThumbsPreloader
             multiThreaded = Properties.Settings.Default.Multithreaded;
             startMinimized = false;
             threadCount = -1;
+            maxParallelInstances = 0;
 
             for (int i = 0; i < arguments.Length; i++)
             {
@@ -101,6 +103,16 @@ namespace WinThumbsPreloader
                     ReadOnlySpan<char> span = arg.AsSpan(2);
                     if (int.TryParse(span, out int n))
                         threadCount = n;
+
+                    continue;
+                }
+
+                // -maxinstances:<n>
+                if (arg.StartsWith("-maxinstances:", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReadOnlySpan<char> span = arg.AsSpan("-maxinstances:".Length);
+                    if (int.TryParse(span, out int maxInst) && maxInst > 0)
+                        maxParallelInstances = maxInst;
 
                     continue;
                 }
@@ -176,35 +188,9 @@ namespace WinThumbsPreloader
             return true;
         }
 
-        private static string NormalizePath(string p)
+        public static string NormalizePath(string p)
         {
-            if (string.IsNullOrWhiteSpace(p))
-                return null;
-
-            p = p.Trim().Trim('"');
-
-            // Case: "C:" = treat as "C:\"
-            if (p.Length == 2 && char.IsLetter(p[0]) && p[1] == ':')
-            {
-                p += "\\";
-            }
-
-            if (!Path.IsPathRooted(p))
-                return null;
-
-            try
-            {
-                p = Path.GetFullPath(p);
-            }
-            catch
-            {
-                return null;
-            }
-
-            if (!Directory.Exists(p) && !File.Exists(p))
-                return null;
-
-            return p;
+            return NetworkPathResolver.NormalizeAndResolvePath(p);
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Net.Http;
@@ -21,13 +21,31 @@ namespace WinThumbsPreloader
             this.Activated += AboutForm_Activated;
             this.KeyPreview = true;
             this.Shown += AboutForm_Shown;
+            InitializePreloadContextMenu();
+        }
+
+        private void InitializePreloadContextMenu()
+        {
+            var menu = new ContextMenuStrip();
+            menu.Items.Add("Preload Folder", null, (_, __) => StartFolderSelectionPreload(recursive: false));
+            menu.Items.Add("Preload Recursively (Shift+Click)", null, (_, __) => StartFolderSelectionPreload(recursive: true));
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("Bulk Preloader... (Ctrl+Click)", null, (_, __) => OpenBulkPreloader());
+            PreloadButton.ContextMenuStrip = menu;
+
+            PreloadTooltip.SetToolTip(
+                PreloadButton,
+                "Click: Preload Folder\r\nShift+Click: Preload Recursively\r\nCtrl+Click (or Right-Click): Open Bulk Preloader");
         }
 
         private void AboutForm_Load(object sender, EventArgs e)
         {
             AppNameLabel.Text += " " + Application.ProductVersion;
             this.Icon = Resources.MainIcon;
-            AppIconPictureBox.Image = new Icon(Resources.MainIcon, 48, 48).ToBitmap();
+            using (var icon = new Icon(Resources.MainIcon, 48, 48))
+            {
+                AppIconPictureBox.Image = icon.ToBitmap();
+            }
             CheckForUpdates();
 
             WriteLine($"AboutForm loaded with product version: {Application.ProductVersion}", LoggingFrequency.GUILogging);
@@ -91,8 +109,12 @@ namespace WinThumbsPreloader
                     using (HttpClient client = new HttpClient())
                     {
                         client.DefaultRequestHeaders.UserAgent.ParseAdd("WinThumbPreloader");
-                        string GitHubApiResponse = await client.GetStringAsync("https://api.github.com/repos/Mfarooq360/WinThumbsPreloader-V2/releases");
-                        string latestVersionString = Regex.Match(GitHubApiResponse, @"""tag_name"":\s*""v([\d\.]+(-beta\d+)?)""").Groups[1].Captures[0].ToString();
+                        string GitHubApiResponse = await client.GetStringAsync("https://api.github.com/repos/joaoschlickmann/WinThumbsPreloader-V2/releases");
+                        var match = Regex.Match(GitHubApiResponse, @"""tag_name"":\s*""v([\d\.]+(-beta\d+)?)""");
+                        if (!match.Success)
+                            return UpdateState.Updated;
+
+                        string latestVersionString = match.Groups[1].Captures[0].ToString();
                         WriteLine("LatestVersionString: " + latestVersionString, LoggingFrequency.DebugLogging);
 
                         Version currentNumericVersion = new Version(Regex.Match(Application.ProductVersion, @"(\d+\.\d+\.\d+)").Value);
@@ -201,12 +223,17 @@ namespace WinThumbsPreloader
             WriteLine("Link clicked: " + e.LinkText, LoggingFrequency.GUILogging);
             try
             {
-                Process.Start(new ProcessStartInfo
+                if (!string.IsNullOrWhiteSpace(e.LinkText) &&
+                    Uri.TryCreate(e.LinkText, UriKind.Absolute, out Uri uri) &&
+                    (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
                 {
-                    FileName = "explorer.exe",
-                    ArgumentList = { e.LinkText }
-                });
-                WriteLine("Opened link: " + e.LinkText, LoggingFrequency.GUILogging);
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = uri.AbsoluteUri,
+                        UseShellExecute = true
+                    });
+                    WriteLine("Opened link: " + uri.AbsoluteUri, LoggingFrequency.GUILogging);
+                }
             }
             catch (Exception ex)
             {
@@ -223,7 +250,7 @@ namespace WinThumbsPreloader
             if (UpdateLabel.Text == Resources.AboutForm_WinThumbsPreloader_NewVersionAvailable ||
                 UpdateLabel.Text == Resources.AboutForm_WinThumbsPreloader_BetaVersionAvailable)
             {
-                url = "https://github.com/Mfarooq360/WinThumbsPreloader-V2";
+                url = "https://github.com/joaoschlickmann/WinThumbsPreloader-V2";
                 WriteLine("Opening GitHub link: " + url, LoggingFrequency.GUILogging);
             }
 
@@ -253,32 +280,48 @@ namespace WinThumbsPreloader
             this.OpenFormCentered(settingsForm);
         }
 
-        private void PreloadButton_Click(object sender, EventArgs e) // TODO: Add an option to make Recursive preloading be the default
+        private void PreloadButton_Click(object sender, EventArgs e)
         {
             WriteLine("PreloadButton clicked", LoggingFrequency.GUILogging);
-            if (PreloadButton.Text == "Preload" || PreloadButton.Text == "Recursively")
+
+            if (PreloadButton.Text == "Bulk Preload" || (Control.ModifierKeys & Keys.Control) == Keys.Control)
             {
-                string preloadMode = PreloadButton.Text;
-                WriteLine("Preload mode: " + preloadMode, LoggingFrequency.GUILogging);
+                OpenBulkPreloader();
+                return;
+            }
 
-                string folderName = PathFromFolderBrowser();
+            bool recursive = PreloadButton.Text == "Recursively" || (Control.ModifierKeys & Keys.Shift) == Keys.Shift;
+            StartFolderSelectionPreload(recursive);
+        }
 
-                if (string.IsNullOrWhiteSpace(folderName))
-                    return;
+        private void OpenBulkPreloader()
+        {
+            WriteLine("Opening BulkPreloaderForm from AboutForm", LoggingFrequency.GUILogging);
+            BulkPreloaderForm bulkForm = new BulkPreloaderForm();
+            this.OpenFormCentered(bulkForm);
+        }
 
-                WriteLine("Selected folder: " + folderName, LoggingFrequency.GUILogging);
+        private void StartFolderSelectionPreload(bool recursive)
+        {
+            string preloadMode = recursive ? "Recursively" : "Preload";
+            WriteLine("Preload mode: " + preloadMode, LoggingFrequency.GUILogging);
 
-                {
-                    try
-                    {
-                        LaunchPreloaderInstance(folderName, preloadMode == "Recursively");
-                    }
-                    catch (Exception ex)
-                    {
-                        WriteLine("Failed to start WinThumbsPreloader: " + ex.Message, LoggingFrequency.GUILogging);
-                        MessageBox.Show($"Failed to start WinThumbsPreloader: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
-                }
+            string folderName = PathFromFolderBrowser();
+
+            if (string.IsNullOrWhiteSpace(folderName))
+                return;
+
+            string resolvedFolder = NetworkPathResolver.NormalizeAndResolvePath(folderName) ?? folderName;
+            WriteLine("Selected folder: " + resolvedFolder, LoggingFrequency.GUILogging);
+
+            try
+            {
+                LaunchPreloaderInstance(resolvedFolder, recursive);
+            }
+            catch (Exception ex)
+            {
+                WriteLine("Failed to start WinThumbsPreloader: " + ex.Message, LoggingFrequency.GUILogging);
+                MessageBox.Show($"Failed to start WinThumbsPreloader: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -321,17 +364,14 @@ namespace WinThumbsPreloader
         {
             if (Control.ModifierKeys == Keys.Shift)
             {
-                // Shift key is currently pressed, so change the button text
                 PreloadButton.Text = "Recursively";
             }
-            /*else if (Control.ModifierKeys == Keys.Control)
+            else if (Control.ModifierKeys == Keys.Control)
             {
-                // Control key is currently pressed, so change the button text
                 PreloadButton.Text = "Bulk Preload";
-            }*/
+            }
             else
             {
-                // Shift key is not pressed, so set the button text to its original value
                 PreloadButton.Text = "Preload";
             }
         }
@@ -340,32 +380,30 @@ namespace WinThumbsPreloader
         {
             if (e.KeyCode == Keys.ShiftKey)
             {
-                // Change the button text when Shift is pressed
                 PreloadButton.Text = "Recursively";
             }
-            /*else if (e.KeyCode == Keys.ControlKey)
+            else if (e.KeyCode == Keys.ControlKey)
             {
-                // Change the button text when Control is pressed
                 PreloadButton.Text = "Bulk Preload";
-            }*/
+            }
         }
 
         private void AboutForm_KeyUp(object sender, KeyEventArgs e)
         {
-            if (e.KeyCode == Keys.ShiftKey)
+            if (e.KeyCode == Keys.ShiftKey || e.KeyCode == Keys.ControlKey)
             {
-                // Change the button text back when Shift is released
-                PreloadButton.Text = "Preload";
+                if ((Control.ModifierKeys & Keys.Shift) == Keys.Shift)
+                    PreloadButton.Text = "Recursively";
+                else if ((Control.ModifierKeys & Keys.Control) == Keys.Control)
+                    PreloadButton.Text = "Bulk Preload";
+                else
+                    PreloadButton.Text = "Preload";
             }
-            /*else if (e.KeyCode == Keys.ControlKey)
-            {
-                // Change the button text back when Control is released
-                PreloadButton.Text = "Preload";
-            }*/
         }
 
         private static bool recognizedLogged = false;
         private static bool cacheResetLogged = false;
+        private static int _cacheResetCheckInProgress = 0;
 
         public static async Task CheckForCacheReset(bool checkResetRecognized, bool logOnly)
         {
@@ -375,41 +413,58 @@ namespace WinThumbsPreloader
                 recognizedLogged = true;
                 return;
             }
-            await Task.Run(async () =>
+
+            if (System.Threading.Interlocked.CompareExchange(ref _cacheResetCheckInProgress, 1, 0) != 0)
+                return;
+
+            try
             {
-                if (Settings.Default.ThumbsResetAlert && !CacheForm.CompareThumbsCacheSize())
+                bool isReset = await Task.Run(() =>
+                    Settings.Default.ThumbsResetAlert && !CacheForm.CompareThumbsCacheSize());
+
+                if (!isReset)
+                    return;
+
+                if (!cacheResetLogged)
                 {
-                    if (!cacheResetLogged)
+                    WriteLine("WARNING: Cache Reset Detected", LoggingFrequency.DebugLogging);
+                    cacheResetLogged = true;
+                }
+
+                if (!logOnly && !Settings.Default.ResetRecognized)
+                {
+                    if (checkResetRecognized)
                     {
-                        WriteLine("WARNING: Cache Reset Detected", LoggingFrequency.DebugLogging);
-                        cacheResetLogged = true;
+                        Settings.Default.ResetRecognized = true;
+                        Settings.Default.Save();
+                        WriteLine("cacheResetRecognized set to true", LoggingFrequency.DebugLogging);
                     }
-                    if (!logOnly && !Settings.Default.ResetRecognized)
+
+                    DialogResult dialogResult = MessageBox.Show(
+                        "The Explorer cache has reset. Would you like to restore the backup?",
+                        "Restore Backup",
+                        MessageBoxButtons.YesNo);
+
+                    if (dialogResult == DialogResult.Yes)
                     {
-                        DialogResult dialogResult = MessageBox.Show("The Explorer cache has reset. Would you like to restore the backup?", "Restore Backup", MessageBoxButtons.YesNo);
-                        if (dialogResult == DialogResult.Yes)
+                        await CacheForm.RestoreThumbsCache(null, false);
+                        if (CacheForm.CompareThumbsCacheSize())
                         {
-                            await CacheForm.RestoreThumbsCache(null, false);
-                            if (CacheForm.CompareThumbsCacheSize())
-                            {
-                                WriteLine("Explorer cache successfully restored", LoggingFrequency.DebugLogging);
-                                MessageBox.Show("Explorer cache successfully restored.", "Restore Successful", MessageBoxButtons.OK);
-                            }
-                            else
-                            {
-                                WriteLine("Failed to restore Explorer cache", LoggingFrequency.DebugLogging);
-                                MessageBox.Show("Failed to restore Explorer cache.", "Restore Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            }
+                            WriteLine("Explorer cache successfully restored", LoggingFrequency.DebugLogging);
+                            MessageBox.Show("Explorer cache successfully restored.", "Restore Successful", MessageBoxButtons.OK);
                         }
-                        if (checkResetRecognized)
+                        else
                         {
-                            Settings.Default.ResetRecognized = true;
-                            Settings.Default.Save();
-                            WriteLine("cacheResetRecognized set to true", LoggingFrequency.DebugLogging);
+                            WriteLine("Failed to restore Explorer cache", LoggingFrequency.DebugLogging);
+                            MessageBox.Show("Failed to restore Explorer cache.", "Restore Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         }
                     }
                 }
-            });
+            }
+            finally
+            {
+                System.Threading.Interlocked.Exchange(ref _cacheResetCheckInProgress, 0);
+            }
         }
     }
 }
