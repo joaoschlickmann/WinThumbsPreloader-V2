@@ -288,7 +288,25 @@ namespace WinThumbsPreloader.Tests
         public void CacheForm_ExplorerCacheSize_ReturnsNonNegativeSizeWithoutException()
         {
             long size = CacheForm.ExplorerCacheSize();
+            CacheForm.GetExplorerCacheStats(out long totalBytes, out long maxSingleDbBytes);
             Assert.True(size >= 0);
+            Assert.True(totalBytes >= maxSingleDbBytes);
+            Assert.True(maxSingleDbBytes >= 0);
+
+            uint[] filtered = ThumbnailsPreloader.FilterSaturatedSecondarySizes([256, 96]);
+            Assert.NotEmpty(filtered);
+            Assert.Equal(256u, filtered[0]);
+        }
+
+        [Fact]
+        public void CacheForm_EnsureThumbnailCacheProtection_SetsHkcuAutorunZero()
+        {
+            CacheForm.EnsureThumbnailCacheProtection();
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\Thumbnail Cache",
+                writable: false);
+            Assert.NotNull(key);
+            Assert.Equal(0, key!.GetValue("Autorun"));
         }
     }
 }

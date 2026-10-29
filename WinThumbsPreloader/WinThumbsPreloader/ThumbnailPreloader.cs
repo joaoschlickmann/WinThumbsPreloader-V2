@@ -312,11 +312,12 @@ namespace WinThumbsPreloader
                         continue;
                     }
 
-                    // 2. Try fast in-proc extraction first; if in-proc fails, fall back to WTS_EXTRACT
+                    // 2. Try fast in-proc extraction first with WTS_SLOWRECLAIM (high retention in thumbcache_idx.db);
+                    // if in-proc fails, fall back to out-of-proc WTS_EXTRACT | WTS_SLOWRECLAIM
                     int hrInProc = tbCache.GetThumbnail(
                         shellItem,
                         size,
-                        WTS_FLAGS.WTS_EXTRACTINPROC,
+                        WTS_FLAGS.WTS_EXTRACTINPROC | WTS_FLAGS.WTS_SLOWRECLAIM,
                         IntPtr.Zero,
                         out _,
                         IntPtr.Zero);
@@ -336,7 +337,7 @@ namespace WinThumbsPreloader
                         int hrExtract = tbCache.GetThumbnail(
                             shellItem,
                             size,
-                            WTS_FLAGS.WTS_EXTRACT,
+                            WTS_FLAGS.WTS_EXTRACT | WTS_FLAGS.WTS_SLOWRECLAIM,
                             IntPtr.Zero,
                             out _,
                             IntPtr.Zero);

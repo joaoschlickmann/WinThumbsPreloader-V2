@@ -497,10 +497,16 @@ namespace WinThumbsPreloader
 
         private void CheckCacheReset(string item)
         {
+            CacheForm.GetExplorerCacheStats(out long currentCacheSize, out long currentMaxSingleDbSize);
+
+            if (currentMaxSingleDbSize >= CacheForm.SingleDbSoftLimitBytes && thumbnailSizes.Length > 1)
+            {
+                Volatile.Write(ref thumbnailSizes, FilterSaturatedSecondarySizes(thumbnailSizes));
+            }
+
             if (Settings.Default.ThumbsResetAlert && currentLoggingFrequency != LoggingFrequency.NoLogging)
             {
-                long currentCacheSize = CacheForm.ExplorerCacheSize();
-                if (initialCacheSize > currentCacheSize)
+                if (initialCacheSize > currentCacheSize || initialMaxSingleDbSize > currentMaxSingleDbSize)
                 {
                     if (!cacheReset)
                     {
@@ -540,6 +546,7 @@ namespace WinThumbsPreloader
         }
 
         public long initialCacheSize = 0;
+        public long initialMaxSingleDbSize = 0;
         public bool cacheReset = false;
         public double preloaderElapsedSeconds;
 
@@ -562,7 +569,7 @@ namespace WinThumbsPreloader
                 }
                 WriteLine("Process priority set to " + Settings.Default.PreloaderProcessPriority, LoggingFrequency.PreloaderLogging);
 
-                initialCacheSize = CacheForm.ExplorerCacheSize();
+                CacheForm.GetExplorerCacheStats(out initialCacheSize, out initialMaxSingleDbSize);
                 ThumbnailPreloader.ResetCounters();
 
                 if (Settings.Default.ThumbsResetAlert && currentLoggingFrequency != LoggingFrequency.NoLogging)
@@ -623,7 +630,7 @@ namespace WinThumbsPreloader
                                     {
                                         lastProcessedPath = item.FullPath;
                                         Volatile.Write(ref currentFile, item.FullPath);
-                                        ThumbnailPreloader.PreloadThumbnail(in item, thumbnailSizes);
+                                        ThumbnailPreloader.PreloadThumbnail(in item, Volatile.Read(ref thumbnailSizes));
                                         if (workerCount == 1 && cacheCheckTimer == null)
                                         {
                                             long nowTick = Environment.TickCount64;
@@ -725,17 +732,44 @@ namespace WinThumbsPreloader
         {
             try
             {
-                return Settings.Default.PreloaderThumbnailSizes
+                uint[] parsed = Settings.Default.PreloaderThumbnailSizes
                     .Split([','], StringSplitOptions.RemoveEmptyEntries)
                     .Select(uint.Parse)
                     .OrderByDescending(x => x)
                     .ToArray();
+
+                return FilterSaturatedSecondarySizes(parsed);
             }
             catch (Exception e)
             {
                 WriteLine("Error parsing thumbnail sizes: " + e.Message, LoggingFrequency.PreloaderLogging);
                 return [256];
             }
+        }
+
+        internal static uint[] FilterSaturatedSecondarySizes(uint[] sizes)
+        {
+            if (sizes == null || sizes.Length <= 1)
+                return sizes ?? [256];
+
+            // Always keep the largest requested size (sizes[0], e.g. 256px) because Windows Explorer
+            // downscales it in RAM for smaller views. If any secondary smaller database (such as
+            // uncompressed thumbcache_96.db) has reached the 1.6 GB soft ceiling, skip it to prevent
+            // Windows thumbcache.dll from hitting its 2 GB 32-bit offset limit and resetting the DB.
+            var retained = new System.Collections.Generic.List<uint>(sizes.Length) { sizes[0] };
+            for (int i = 1; i < sizes.Length; i++)
+            {
+                uint candidate = sizes[i];
+                long dbBytes = CacheForm.GetExplorerDbFileSize(candidate);
+                if (dbBytes >= CacheForm.SingleDbSoftLimitBytes)
+                {
+                    WriteLine($"WARNING: Skipping saturated secondary thumbnail size {candidate}px (thumbcache_{candidate}.db is {dbBytes / (1024 * 1024)} MB >= {CacheForm.SingleDbSoftLimitBytes / (1024 * 1024)} MB soft limit) to prevent Windows 2 GB cache reset. Larger size {sizes[0]}px remains active.", LoggingFrequency.PreloaderLogging);
+                    continue;
+                }
+                retained.Add(candidate);
+            }
+
+            return retained.Count == sizes.Length ? sizes : retained.ToArray();
         }
 
         private bool InstanceCompleted() =>

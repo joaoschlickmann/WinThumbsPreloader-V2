@@ -41,6 +41,8 @@ namespace WinThumbsPreloader
             if (!HandleElevationState(arguments))
                 return;
 
+            CacheForm.EnsureThumbnailCacheProtection();
+
             if (options.startMinimized)
             {
                 WriteLine("Starting GUI cache form minimized", LoggingFrequency.GUILogging);

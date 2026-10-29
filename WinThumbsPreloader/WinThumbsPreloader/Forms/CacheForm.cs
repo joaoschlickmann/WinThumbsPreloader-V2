@@ -1018,6 +1018,9 @@ namespace WinThumbsPreloader
                    ((uint)ex.HResult == 0x80070005);
         }
 
+        // Soft ceiling per individual thumbcache_*.db file (~1.6 GB) to prevent hitting Windows' 32-bit offset limit (~2 GB)
+        public const long SingleDbSoftLimitBytes = 1_600L * 1024 * 1024;
+
         private static readonly EnumerationOptions DbSizeEnumerationOptions = new()
         {
             IgnoreInaccessible = true,
@@ -1025,7 +1028,7 @@ namespace WinThumbsPreloader
             RecurseSubdirectories = false
         };
 
-        private static long SumDbFilesSize(string directoryPath)
+        private static long SumDbFilesSize(string directoryPath, out long maxSingleDbBytes)
         {
             var sizes = new System.IO.Enumeration.FileSystemEnumerable<long>(
                 directoryPath,
@@ -1037,11 +1040,43 @@ namespace WinThumbsPreloader
             };
 
             long total = 0;
+            long maxSingle = 0;
             foreach (long len in sizes)
             {
                 total += len;
+                if (len > maxSingle)
+                    maxSingle = len;
             }
+            maxSingleDbBytes = maxSingle;
             return total;
+        }
+
+        public static void GetExplorerCacheStats(out long totalBytes, out long maxSingleDbBytes)
+        {
+            totalBytes = 0;
+            maxSingleDbBytes = 0;
+            try
+            {
+                totalBytes = SumDbFilesSize(explorerPath, out maxSingleDbBytes);
+            }
+            catch (Exception e)
+            {
+                WriteLine("Failed to get explorer cache stats: " + e.Message, LoggingFrequency.GUILogging);
+            }
+        }
+
+        public static long GetExplorerDbFileSize(uint size)
+        {
+            try
+            {
+                string dbPath = Path.Combine(explorerPath, $"thumbcache_{size}.db");
+                var info = new FileInfo(dbPath);
+                return info.Exists ? info.Length : 0;
+            }
+            catch
+            {
+                return 0;
+            }
         }
 
         public static long ExplorerCacheSize()
@@ -1049,7 +1084,7 @@ namespace WinThumbsPreloader
             long explorerCacheSize = 0;
             try
             {
-                explorerCacheSize = SumDbFilesSize(explorerPath);
+                explorerCacheSize = SumDbFilesSize(explorerPath, out _);
             }
             catch (Exception e)
             {
@@ -1070,7 +1105,7 @@ namespace WinThumbsPreloader
 
             try
             {
-                backupCacheSize = SumDbFilesSize(currentBackupPath);
+                backupCacheSize = SumDbFilesSize(currentBackupPath, out _);
             }
             catch (Exception e)
             {
@@ -1656,6 +1691,51 @@ namespace WinThumbsPreloader
 
         public const int sagesetNumber = 100;
         private const string ThumbnailCacheKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\Thumbnail Cache";
+        private const string ThumbnailCacheWow64Key = @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\Thumbnail Cache";
+
+        /// <summary>
+        /// Ensures Windows Automatic Maintenance (SilentCleanup) does not wipe the thumbnail cache,
+        /// even after Windows Feature Updates reset VolumeCaches registry keys.
+        /// </summary>
+        public static void EnsureThumbnailCacheProtection()
+        {
+            try
+            {
+                using RegistryKey hkcuKey = Registry.CurrentUser.CreateSubKey(ThumbnailCacheKey, writable: true);
+                if (hkcuKey != null && (hkcuKey.GetValue("Autorun") is not int hkcuVal || hkcuVal != 0))
+                {
+                    hkcuKey.SetValue("Autorun", 0, RegistryValueKind.DWord);
+                }
+            }
+            catch
+            {
+                // Ignore if restricted in sandboxed environment
+            }
+
+            EnsureLocalMachineAutorunDisabled(ThumbnailCacheKey);
+            EnsureLocalMachineAutorunDisabled(ThumbnailCacheWow64Key);
+        }
+
+        private static void EnsureLocalMachineAutorunDisabled(string subKeyPath)
+        {
+            try
+            {
+                using (RegistryKey readKey = Registry.LocalMachine.OpenSubKey(subKeyPath, writable: false))
+                {
+                    if (readKey == null || (readKey.GetValue("Autorun") is int currentVal && currentVal == 0))
+                        return;
+                }
+
+                using (RegistryKey writeKey = Registry.LocalMachine.OpenSubKey(subKeyPath, writable: true))
+                {
+                    writeKey?.SetValue("Autorun", 0, RegistryValueKind.DWord);
+                }
+            }
+            catch
+            {
+                // Standard user without elevation cannot write to HKLM; HKCU and installer handle non-elevated cases
+            }
+        }
 
         public void ConfigureDiskCleanupSageset()
         {
