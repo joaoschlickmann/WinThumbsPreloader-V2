@@ -1,4 +1,4 @@
-﻿namespace WinThumbsPreloader.Forms
+namespace WinThumbsPreloader.Forms
 {
     partial class AdvancedSettingsForm
     {
@@ -455,7 +455,6 @@
         private System.Windows.Forms.TabPage tabPage1;
         private System.Windows.Forms.TabPage tabPage2;
         private System.Windows.Forms.TabPage tabPage3;
-        private System.Windows.Forms.Label label3;
         private System.Windows.Forms.CheckBox AutoDeleteLogsByAgeCheckBox;
         private System.Windows.Forms.NumericUpDown ProgressDialogUpdateSpeedNumericUpDown;
         private System.Windows.Forms.Label ProgressDialogUpdateSpeedMsLabel;

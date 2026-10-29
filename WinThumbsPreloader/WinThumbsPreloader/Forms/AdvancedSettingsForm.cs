@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
@@ -58,9 +58,11 @@ namespace WinThumbsPreloader.Forms
 
             WaitAfterPreloadingCompletionCheckBox.Checked = Settings.Default.WaitAfterPreloading;
             WaitAfterCacheBackupCheckBox.Checked = Settings.Default.WaitAfterCacheBackup;
-            WaitCacheNumericUpDown.Value = Settings.Default.WaitTimeAfterCacheBackup;
-            WaitPreloadNumericUpDown.Value = Settings.Default.WaitTimeAfterPreloading;
-            ProgressDialogUpdateSpeedNumericUpDown.Value = Settings.Default.ProgressDialogUpdateSpeed;
+            WaitPreloadComboBox.SelectedItem = Settings.Default.WaitAfterPreloadingUnit;
+            WaitCacheComboBox.SelectedItem = Settings.Default.WaitAfterCacheUnit;
+            WaitCacheNumericUpDown.Value = Math.Clamp(Settings.Default.WaitTimeAfterCacheBackup, (int)WaitCacheNumericUpDown.Minimum, (int)WaitCacheNumericUpDown.Maximum);
+            WaitPreloadNumericUpDown.Value = Math.Clamp(Settings.Default.WaitTimeAfterPreloading, (int)WaitPreloadNumericUpDown.Minimum, (int)WaitPreloadNumericUpDown.Maximum);
+            ProgressDialogUpdateSpeedNumericUpDown.Value = Math.Clamp(Settings.Default.ProgressDialogUpdateSpeed, (int)ProgressDialogUpdateSpeedNumericUpDown.Minimum, (int)ProgressDialogUpdateSpeedNumericUpDown.Maximum);
             PreloaderProcessPriorityComboBox.SelectedItem = Settings.Default.PreloaderProcessPriority;
         }
 

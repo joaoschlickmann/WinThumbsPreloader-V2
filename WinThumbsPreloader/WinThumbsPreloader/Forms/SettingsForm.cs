@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.IO;
 using System.Runtime.Versioning;
@@ -219,7 +219,7 @@ namespace WinThumbsPreloader
         {
             try
             {
-                if (e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent(DataFormats.Text))
+                if (e.Data != null && (e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent(DataFormats.Text)))
                 {
                     e.Effect = DragDropEffects.Copy;
                 }
@@ -238,7 +238,7 @@ namespace WinThumbsPreloader
         {
             try
             {
-                if (e.Data.GetDataPresent(DataFormats.FileDrop))
+                if (e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop))
                 {
                     string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
                     if (files != null && files.Length > 0)
@@ -249,9 +249,9 @@ namespace WinThumbsPreloader
                         WriteLine("ExtensionsTextBox.Text: " + ExtensionsTextBox.Text, LoggingFrequency.DebugLogging);
                     }
                 }
-                else if (e.Data.GetDataPresent(DataFormats.Text))
+                else if (e.Data != null && e.Data.GetDataPresent(DataFormats.Text))
                 {
-                    string text = (string)e.Data.GetData(DataFormats.Text);
+                    string text = e.Data.GetData(DataFormats.Text) as string ?? string.Empty;
                     WriteLine("Text: " + text, LoggingFrequency.DebugLogging);
                     ExtensionsTextBox.Text = text.Length > 10000 ? text.Substring(0, 10000) : text;
                     WriteLine("ExtensionsTextBox.Text: " + ExtensionsTextBox.Text, LoggingFrequency.DebugLogging);

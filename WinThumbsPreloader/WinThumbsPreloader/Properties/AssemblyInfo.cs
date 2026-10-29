@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -55,6 +55,7 @@ using System.Runtime.Versioning;
 // You can set all values ​​or accept the default build and revision numbers.
 // using "*" as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("2.0.0")]
-[assembly: AssemblyFileVersion("2.0.0")]
-[assembly: AssemblyInformationalVersion("2.0.0-beta7")]
+[assembly: AssemblyVersion("3.0.0")]
+[assembly: AssemblyFileVersion("3.0.0")]
+[assembly: AssemblyInformationalVersion("3.0.0")]
+[assembly: InternalsVisibleTo("WinThumbsPreloader.Tests")]

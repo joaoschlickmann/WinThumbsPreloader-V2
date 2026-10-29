@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32.TaskScheduler;
+using Microsoft.Win32.TaskScheduler;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -7,12 +7,10 @@ using System.Globalization;
 using System.Linq;
 using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
-using System.Windows;
 using System.Windows.Forms;
 using WinThumbsPreloader.Forms;
 using WinThumbsPreloader.Properties;
 using static WinThumbsPreloader.Logger;
-using MessageBox = System.Windows.Forms.MessageBox;
 using Point = System.Drawing.Point;
 using Task = System.Threading.Tasks.Task;
 using TaskScheduler = Microsoft.Win32.TaskScheduler.Task;
@@ -134,8 +132,8 @@ namespace WinThumbsPreloader
             }
             else if (ScheduleSaveButton.Text == "Delete Task")
             {
-                MessageBoxResult result = (MessageBoxResult)MessageBox.Show("Are you sure you want to delete the scheduled task?", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                if (result == MessageBoxResult.Yes)
+                DialogResult result = MessageBox.Show("Are you sure you want to delete the scheduled task?", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (result == DialogResult.Yes)
                 {
                     DeleteTask();
                 }
@@ -153,13 +151,25 @@ namespace WinThumbsPreloader
             this.DrivesCheckedListBox.CheckOnClick = true;
         }
 
-        private void EnabledCheckBox_CheckedChanged(object sender, EventArgs e) // This isn't supposed to do this most likely
+        private bool _loadingTaskDetails = false;
+
+        private void EnabledCheckBox_CheckedChanged(object sender, EventArgs e)
         {
-            using (TaskService ts = new TaskService())
+            if (_loadingTaskDetails)
+                return;
+
+            try
             {
-                TaskScheduler task = ts.FindTask(TaskName);
-                if (task != null)
-                    task.Enabled = EnabledCheckBox.Checked;
+                using (TaskService ts = new TaskService())
+                {
+                    TaskScheduler task = ts.FindTask(TaskName);
+                    if (task != null)
+                        task.Enabled = EnabledCheckBox.Checked;
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteLine("Failed to update scheduled task enabled state: " + ex.Message, LoggingFrequency.GUILogging);
             }
         }
 
@@ -204,23 +214,33 @@ namespace WinThumbsPreloader
 
             IntPtr foregroundWindow = GetForegroundWindow();
 
-            foreach (var process in processes)
+            try
             {
-                if (process.MainWindowTitle.Contains("Task Scheduler"))
+                foreach (var process in processes)
                 {
-                    if (process.MainWindowHandle != foregroundWindow)
+                    if (process.MainWindowTitle.Contains("Task Scheduler"))
                     {
-                        if (process.MainWindowHandle != foregroundWindow || IsIconic(process.MainWindowHandle))
+                        if (process.MainWindowHandle != foregroundWindow)
                         {
-                            // Maximize the window
-                            ShowWindowAsync(process.MainWindowHandle, SW_MAXIMIZE);
+                            if (process.MainWindowHandle != foregroundWindow || IsIconic(process.MainWindowHandle))
+                            {
+                                // Maximize the window
+                                ShowWindowAsync(process.MainWindowHandle, SW_MAXIMIZE);
 
-                            // Bring it to the front
-                            SetForegroundWindow(process.MainWindowHandle);
+                                // Bring it to the front
+                                SetForegroundWindow(process.MainWindowHandle);
+                            }
                         }
+                        taskSchedulerFound = true;
+                        break;
                     }
-                    taskSchedulerFound = true;
-                    break;
+                }
+            }
+            finally
+            {
+                foreach (var process in processes)
+                {
+                    process.Dispose();
                 }
             }
 
@@ -307,16 +327,36 @@ namespace WinThumbsPreloader
                             triggerType = "Month";
                         }
                         WriteLine($"Trigger type: {triggerType}", LoggingFrequency.DebugLogging);
-                        // Marshal the updates to the UI thread
-                        this.Invoke((MethodInvoker)delegate
+                        DateTime? extractedTriggerTime = null;
+                        var timeTrigger = triggers.FirstOrDefault(t => t is DailyTrigger || t is WeeklyTrigger || t is MonthlyTrigger);
+                        if (timeTrigger != null)
                         {
-                            OnIdleCheckBox.Checked = isIdleTrigger;
-                            EnabledCheckBox.Checked = isEnabled;
-                            UpdateUIFromArguments(arguments);
-                            UpdateRunEveryComboBox(triggerType);
-                            OutputTextBox_Initialize(task);
-                        });
-                        InitializeTimeValues(triggers);
+                            extractedTriggerTime = DateTime.Today + timeTrigger.StartBoundary.TimeOfDay;
+                        }
+
+                        if (!IsDisposed && !Disposing && IsHandleCreated)
+                        {
+                            this.Invoke((MethodInvoker)delegate
+                            {
+                                _loadingTaskDetails = true;
+                                try
+                                {
+                                    OnIdleCheckBox.Checked = isIdleTrigger;
+                                    EnabledCheckBox.Checked = isEnabled;
+                                    UpdateUIFromArguments(arguments);
+                                    UpdateRunEveryComboBox(triggerType);
+                                    OutputTextBox_Initialize(task);
+                                    if (extractedTriggerTime.HasValue)
+                                    {
+                                        UpdateTimeComboBoxes(extractedTriggerTime.Value, Settings.Default.TwentyFourHourMode);
+                                    }
+                                }
+                                finally
+                                {
+                                    _loadingTaskDetails = false;
+                                }
+                            });
+                        }
                     }
                 }
             });
@@ -341,33 +381,57 @@ namespace WinThumbsPreloader
                 }
                 WriteLine($"Threads: {ThreadsNumericUpDown.Value}", LoggingFrequency.DebugLogging);
 
-                // Extract and update other arguments-related UI elements...
-                var rawDrivePaths = Regex.Split(arguments, @"(?=(\w:\\)|(\\\\[\w-]+\\?))")
+                // Extract quoted paths first, then fallback to unquoted drive/UNC tokens for legacy tasks
+                var pathsSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                string remainingArgs = arguments;
+
+                foreach (Match quotedMatch in Regex.Matches(arguments, "\"([^\"]+)\""))
+                {
+                    string qPath = quotedMatch.Groups[1].Value.Trim();
+                    if (!string.IsNullOrWhiteSpace(qPath) && !qPath.StartsWith('-'))
+                    {
+                        if (qPath.Length == 2 && char.IsLetter(qPath[0]) && qPath[1] == ':')
+                            qPath += "\\";
+                        AddParsedSchedulePath(qPath, pathsSet);
+                    }
+                }
+
+                remainingArgs = Regex.Replace(remainingArgs, "\"[^\"]+\"", " ");
+
+                var rawDrivePaths = Regex.Split(remainingArgs, @"(?=(\b[A-Za-z]:\\)|(\\\\[^\\\s]+\\))")
                                          .Where(path => !string.IsNullOrWhiteSpace(path))
                                          .ToList();
                 WriteLine($"Raw drive paths: {string.Join(", ", rawDrivePaths)}", LoggingFrequency.DebugLogging);
 
-                var pathsSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var rawPath in rawDrivePaths)
                 {
-                    var cleanedPath = rawPath.Trim().Replace("\n", string.Empty);
-                    if (cleanedPath.Length == 3) // e.g., "C:\\"
+                    var cleanedPath = rawPath.Trim().Replace("\n", string.Empty).Trim('"');
+                    if (!cleanedPath.StartsWith('-'))
                     {
-                        if (DrivesCheckedListBox.Visible)
-                        {
-                            DrivesCheckedListBox.SetItemChecked(DrivesCheckedListBox.Items.IndexOf(cleanedPath[0].ToString()), true);
-                        }
-                        else
-                        {
-                            pathsSet.Add(cleanedPath);
-                        }
-                    }
-                    else if (cleanedPath.Length > 3 && !cleanedPath.StartsWith('-'))
-                    {
-                        pathsSet.Add(cleanedPath);
+                        AddParsedSchedulePath(cleanedPath, pathsSet);
                     }
                 }
                 PathsTextBox.Text = string.Join(Environment.NewLine, pathsSet);
+            }
+        }
+
+        private void AddParsedSchedulePath(string cleanedPath, HashSet<string> pathsSet)
+        {
+            if (cleanedPath.Length == 3 && char.IsLetter(cleanedPath[0]) && cleanedPath[1] == ':' && cleanedPath[2] == '\\')
+            {
+                int idx = DrivesCheckedListBox.Items.IndexOf(char.ToUpperInvariant(cleanedPath[0]).ToString());
+                if (DrivesCheckedListBox.Visible && idx >= 0)
+                {
+                    DrivesCheckedListBox.SetItemChecked(idx, true);
+                }
+                else
+                {
+                    pathsSet.Add(cleanedPath);
+                }
+            }
+            else if (cleanedPath.Length > 3)
+            {
+                pathsSet.Add(cleanedPath);
             }
         }
 
@@ -491,7 +555,8 @@ namespace WinThumbsPreloader
                     td.RegistrationInfo.Description = EffectiveDescription;
 
                     // Set trigger based on user's selection
-                    if (RunEveryComboBox.SelectedItem.ToString() == "Hour") // Special handling for hourly trigger
+                    string selectedPeriod = RunEveryComboBox.SelectedItem?.ToString() ?? string.Empty;
+                    if (selectedPeriod == "Hour") // Special handling for hourly trigger
                     {
                         var dailyTrigger = new DailyTrigger();
                         dailyTrigger.StartBoundary = triggerStart;
@@ -503,7 +568,7 @@ namespace WinThumbsPreloader
                     {
                         // Handling for Day, Week, Month triggers
                         Trigger trigger = null;
-                        switch (RunEveryComboBox.SelectedItem.ToString())
+                        switch (selectedPeriod)
                         {
                             case "Day":
                                 trigger = new DailyTrigger();
@@ -587,19 +652,36 @@ namespace WinThumbsPreloader
                 return dateTimePicker1.Value;
             }
 
-            if (TimeDigitsComboBox.SelectedItem == null || TimeOfDayComboBox.SelectedItem == null || RunEveryComboBox.SelectedItem == null)
+            bool is24HourMode = Settings.Default.TwentyFourHourMode;
+
+            if (TimeDigitsComboBox.SelectedItem == null ||
+                (!is24HourMode && TimeOfDayComboBox.SelectedItem == null) ||
+                RunEveryComboBox.SelectedItem == null)
             {
                 MessageBox.Show("Please select the time to be scheduled before saving the task.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return null;
             }
 
-            string timeStr = TimeDigitsComboBox.SelectedItem.ToString() + " " + TimeOfDayComboBox.SelectedItem.ToString();
-            if (!DateTime.TryParseExact(timeStr, "h:mm tt", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime selectedTime))
+            DateTime selectedTime;
+            if (is24HourMode)
             {
-                // Provide a default time if parsing fails, or handle the error appropriately
-                MessageBox.Show("The selected time is invalid. Please correct it before saving the task.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return null;
+                string timeStr = TimeDigitsComboBox.SelectedItem.ToString() ?? string.Empty;
+                if (!DateTime.TryParseExact(timeStr, ["HH:mm", "H:mm"], CultureInfo.InvariantCulture, DateTimeStyles.None, out selectedTime))
+                {
+                    MessageBox.Show("The selected time is invalid. Please correct it before saving the task.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return null;
+                }
             }
+            else
+            {
+                string timeStr = TimeDigitsComboBox.SelectedItem.ToString() + " " + TimeOfDayComboBox.SelectedItem!.ToString();
+                if (!DateTime.TryParseExact(timeStr, "h:mm tt", CultureInfo.InvariantCulture, DateTimeStyles.None, out selectedTime))
+                {
+                    MessageBox.Show("The selected time is invalid. Please correct it before saving the task.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return null;
+                }
+            }
+
             return selectedTime;
         }
 
@@ -642,8 +724,20 @@ namespace WinThumbsPreloader
                 return null;
             }
 
-            // Join all unique paths with spaces
-            arguments += string.Join(" ", uniquePaths);
+            // Quote paths that contain spaces (avoid trailing backslash before closing quote for CommandLineToArgvW)
+            var formattedPaths = uniquePaths.Select(p =>
+            {
+                string trimmed = p.Trim().Trim('"');
+                if (!trimmed.Contains(' '))
+                    return trimmed;
+
+                if (trimmed.Length > 3 && trimmed.EndsWith('\\'))
+                    trimmed = trimmed.TrimEnd('\\');
+
+                return $"\"{trimmed}\"";
+            });
+
+            arguments += string.Join(" ", formattedPaths);
             WriteLine($"Final arguments: {arguments}", LoggingFrequency.DebugLogging);
 
             return arguments.Trim();
@@ -837,7 +931,7 @@ namespace WinThumbsPreloader
                 dateTimePicker1.Visible = true;
 
                 TimeDigitsComboBox.Visible = false;
-                TimeOfDayComboBox.Enabled = false;
+                TimeDigitsComboBox.Enabled = false;
 
                 TimeOfDayComboBox.Visible = false;
                 TimeOfDayComboBox.Enabled = false;

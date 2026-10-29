@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -80,6 +80,37 @@ namespace WinThumbsPreloader
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             CacheForm.BackupInfoChanged -= CacheForm_BackupInfoChanged;
+
+            if (updateTimer != null)
+            {
+                updateTimer.Stop();
+                updateTimer.Tick -= UpdateTimer_Tick;
+                updateTimer.Dispose();
+                updateTimer = null;
+            }
+
+            if (autoBackupTimer != null)
+            {
+                autoBackupTimer.Stop();
+                autoBackupTimer.Tick -= AutoBackupThumbsCache_Tick;
+                autoBackupTimer.Dispose();
+                autoBackupTimer = null;
+            }
+
+            if (autoRestoreTimer != null)
+            {
+                autoRestoreTimer.Stop();
+                autoRestoreTimer.Tick -= AutoRestoreThumbsCache_Tick;
+                autoRestoreTimer.Dispose();
+                autoRestoreTimer = null;
+            }
+
+            if (notifyIcon1 != null)
+            {
+                notifyIcon1.Visible = false;
+                notifyIcon1.Dispose();
+            }
+
             base.OnFormClosed(e);
         }
 
@@ -2085,26 +2116,36 @@ namespace WinThumbsPreloader
 
             await Task.Run(() =>
             {
-                foreach (var process in processes)
+                try
                 {
-                    try
+                    foreach (var process in processes)
                     {
-                        process.Kill();
+                        try
+                        {
+                            process.Kill();
+                        }
+                        catch (Exception ex)
+                        {
+                            WriteLine("Failed to kill explorer: " + ex.Message, LoggingFrequency.GUILogging);
+                        }
                     }
-                    catch (Exception ex)
+
+                    // Wait for all explorer processes to exit
+                    foreach (var process in processes)
                     {
-                        WriteLine("Failed to kill explorer: " + ex.Message, LoggingFrequency.GUILogging);
+                        try
+                        {
+                            process.WaitForExit(5000);
+                        }
+                        catch { }
                     }
                 }
-
-                // Wait for all explorer processes to exit
-                foreach (var process in processes)
+                finally
                 {
-                    try
+                    foreach (var process in processes)
                     {
-                        process.WaitForExit(5000);
+                        process.Dispose();
                     }
-                    catch { }
                 }
             });
 
@@ -2117,7 +2158,10 @@ namespace WinThumbsPreloader
             try
             {
                 // Check if explorer is already running
-                bool explorerRunning = Process.GetProcessesByName("explorer").Length != 0;
+                var existing = Process.GetProcessesByName("explorer");
+                bool explorerRunning = existing.Length != 0;
+                foreach (var p in existing)
+                    p.Dispose();
 
                 if (!explorerRunning)
                 {
@@ -2227,18 +2271,28 @@ namespace WinThumbsPreloader
 
                 IntPtr foregroundWindow = GetForegroundWindow();
 
-                foreach (var process in processes)
+                try
                 {
-                    if (process.MainWindowTitle == "Explorer Backup")
+                    foreach (var process in processes)
                     {
-                        if (process.MainWindowHandle != foregroundWindow || IsIconic(process.MainWindowHandle))
+                        if (process.MainWindowTitle == "Explorer Backup")
                         {
-                            ShowWindowAsync(process.MainWindowHandle, SW_MAXIMIZE);
-                            SetForegroundWindow(process.MainWindowHandle);
-                        }
+                            if (process.MainWindowHandle != foregroundWindow || IsIconic(process.MainWindowHandle))
+                            {
+                                ShowWindowAsync(process.MainWindowHandle, SW_MAXIMIZE);
+                                SetForegroundWindow(process.MainWindowHandle);
+                            }
 
-                        backupFolderWindowFound = true;
-                        break;
+                            backupFolderWindowFound = true;
+                            break;
+                        }
+                    }
+                }
+                finally
+                {
+                    foreach (var process in processes)
+                    {
+                        process.Dispose();
                     }
                 }
 
@@ -2373,21 +2427,31 @@ namespace WinThumbsPreloader
 
             IntPtr foregroundWindow = GetForegroundWindow();
 
-            foreach (var process in processes)
+            try
             {
-                if (process.MainWindowTitle == "Explorer")
+                foreach (var process in processes)
                 {
-                    if (process.MainWindowHandle != foregroundWindow)
+                    if (process.MainWindowTitle == "Explorer")
                     {
-                        if (process.MainWindowHandle != foregroundWindow || IsIconic(process.MainWindowHandle))
+                        if (process.MainWindowHandle != foregroundWindow)
                         {
-                            ShowWindowAsync(process.MainWindowHandle, SW_MAXIMIZE);
+                            if (process.MainWindowHandle != foregroundWindow || IsIconic(process.MainWindowHandle))
+                            {
+                                ShowWindowAsync(process.MainWindowHandle, SW_MAXIMIZE);
 
-                            SetForegroundWindow(process.MainWindowHandle);
+                                SetForegroundWindow(process.MainWindowHandle);
+                            }
                         }
+                        cacheFolderWindowFound = true;
+                        break;
                     }
-                    cacheFolderWindowFound = true;
-                    break;
+                }
+            }
+            finally
+            {
+                foreach (var process in processes)
+                {
+                    process.Dispose();
                 }
             }
 

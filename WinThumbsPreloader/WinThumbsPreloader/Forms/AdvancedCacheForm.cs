@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -397,7 +397,7 @@ namespace WinThumbsPreloader.Forms
         private void ResetGeneralTabToDefaults()
         {
             WriteLine(
-                "Resetting Advanced Cache Cache tab to default",
+                "Resetting Advanced Cache General tab to default",
                 LoggingFrequency.GUILogging
             );
 
@@ -412,7 +412,7 @@ namespace WinThumbsPreloader.Forms
         private void ResetCacheTabToDefaults()
         {
             WriteLine(
-                "Resetting Advanced Cache General tab to default",
+                "Resetting Advanced Cache Cache tab to default",
                 LoggingFrequency.GUILogging
             );
 

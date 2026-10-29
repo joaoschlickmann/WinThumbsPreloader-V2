@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
@@ -125,10 +125,9 @@ namespace WinThumbsPreloader
             }
             set
             {
-                if (_state == ProgressDialogState.Stopped)
-                    throw new InvalidOperationException("Timer is not running.");
-                else if (_nativeProgressDialog != null)
-                    _nativeProgressDialog.SetLine(1, _line1 = value, _compactPaths, IntPtr.Zero);
+                _line1 = value;
+                if (_state != ProgressDialogState.Stopped && _nativeProgressDialog != null)
+                    _nativeProgressDialog.SetLine(1, _line1, _compactPaths, IntPtr.Zero);
             }
         }
         /// <summary>
@@ -143,10 +142,9 @@ namespace WinThumbsPreloader
             }
             set
             {
-                if (_state == ProgressDialogState.Stopped)
-                    throw new InvalidOperationException("Timer is not running.");
-                else if (_nativeProgressDialog != null)
-                    _nativeProgressDialog.SetLine(2, _line2 = value, _compactPaths, IntPtr.Zero);
+                _line2 = value;
+                if (_state != ProgressDialogState.Stopped && _nativeProgressDialog != null)
+                    _nativeProgressDialog.SetLine(2, _line2, _compactPaths, IntPtr.Zero);
             }
         }
         /// <summary>
@@ -161,14 +159,13 @@ namespace WinThumbsPreloader
             }
             set
             {
-                if (_state == ProgressDialogState.Stopped)
-                    throw new InvalidOperationException("Timer is not running.");
-                else if (_nativeProgressDialog != null)
+                _line3 = value;
+                if (_state != ProgressDialogState.Stopped && _nativeProgressDialog != null)
                 {
                     if (ShowTimeRemaining)
                         throw new InvalidOperationException("Line3 cannot be set if ShowTimeRemaining is set to true.");
                     else
-                        _nativeProgressDialog.SetLine(3, _line3 = value, _compactPaths, IntPtr.Zero);
+                        _nativeProgressDialog.SetLine(3, _line3, _compactPaths, IntPtr.Zero);
                 }
             }
         }
@@ -324,7 +321,7 @@ namespace WinThumbsPreloader
                 {
                     _flags &= ~PROGDLG.MarqueeProgress;
                 }
-                if (_state != ProgressDialogState.Stopped)
+                if (_state != ProgressDialogState.Stopped && _progressBarHandler != IntPtr.Zero)
                 {
                     int style = (int)GetWindowLongPtr(_progressBarHandler, GWL.GWL_STYLE);
                     if (value)
@@ -336,7 +333,7 @@ namespace WinThumbsPreloader
                         style &= ~(int)PBS.PBS_MARQUEE;
                     }
                     SetWindowLongPtr(_progressBarHandler, GWL.GWL_STYLE, (IntPtr)style);
-                    SendMessage(_progressBarHandler, 0x40A, value ? 1 : 0, 0);
+                    SendMessage(_progressBarHandler, (int)PBM.PBM_SETMARQUEE, value ? 1 : 0, 0);
                 }
             }
         }
@@ -409,8 +406,8 @@ namespace WinThumbsPreloader
             if (parent == null) parent = Form.ActiveForm;
             IntPtr handle = (parent == null) ? IntPtr.Zero : parent.Handle;
 
-            _nativeProgressDialog = (IProgressDialog)Activator.CreateInstance(_progressDialogType);
-            _nativeProgressDialog.SetCancelMsg(_cancelMessage, null);
+            _nativeProgressDialog = (IProgressDialog)Activator.CreateInstance(_progressDialogType)!;
+            _nativeProgressDialog!.SetCancelMsg(_cancelMessage, null);
             if (ShowTimeRemaining) _nativeProgressDialog.SetLine(3, "Estimating time remaining...", false, IntPtr.Zero);
             // Temporary title for progressbar handler detection
             string guidTitle = Guid.NewGuid().ToString();

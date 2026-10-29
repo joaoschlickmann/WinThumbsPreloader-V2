@@ -1,4 +1,4 @@
-﻿#define MyAppName "WinThumbsPreloader"
+#define MyAppName "WinThumbsPreloader"
 #define MyAppReleaseDirectory "..\WinThumbsPreloader\WinThumbsPreloader\bin\Release\net10.0-windows7.0\win-x64"
 #define MyAppFilename MyAppName + ".exe"
 #define MyAppFilepath MyAppReleaseDirectory + "\" + MyAppFilename
@@ -8,17 +8,18 @@
 #define MyAppVersion Str(Version[0]) + "." + Str(Version[1]) + "." + Str(Version[2])
 #define MyAppPublisher1 "Dmitry Bruhov"
 #define MyAppPublisher2 "Mutahar Farooq"
+#define MyAppPublisher3 "João Schlickmann"
 #define MyAppId "CF49DD18-AA76-4E79-97C2-4FEAED1AED5F"
 
 [Setup]
-AppCopyright=Copyright (c) 2018 {#MyAppPublisher1}, Copyright (c) 2026 {#MyAppPublisher2}
+AppCopyright=Copyright (c) 2018 {#MyAppPublisher1}, Copyright (c) 2026 {#MyAppPublisher2}, {#MyAppPublisher3}
 AppId={#MyAppId}
 AppMutex={#MyAppId}
 AppName={#MyAppName}
-AppPublisher={#MyAppPublisher1}, {#MyAppPublisher2}
-AppPublisherURL=https://github.com/Mfarooq360/WinThumbsPreloader-V2
-AppSupportURL=https://github.com/Mfarooq360/WinThumbsPreloader-V2/issues
-AppUpdatesURL=https://github.com/Mfarooq360/WinThumbsPreloader-V2/releases
+AppPublisher={#MyAppPublisher1}, {#MyAppPublisher2}, {#MyAppPublisher3}
+AppPublisherURL=https://github.com/joaoschlickmann/WinThumbsPreloader-V2
+AppSupportURL=https://github.com/joaoschlickmann/WinThumbsPreloader-V2/issues
+AppUpdatesURL=https://github.com/joaoschlickmann/WinThumbsPreloader-V2/releases
 AppVerName={#MyAppName} {#MyAppVersion}
 AppVersion={#MyAppVersion}
 ArchitecturesAllowed=x64compatible

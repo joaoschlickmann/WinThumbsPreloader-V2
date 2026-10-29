@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32.TaskScheduler;
+using Microsoft.Win32.TaskScheduler;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -62,7 +62,7 @@ namespace WinThumbsPreloader.Forms
         private void DriveSortComboBox_SelectedIndexChanged(object sender, EventArgs e)
         {
             // Save the selected sort choice to the application settings.
-            Settings.Default.DriveSortChoice = DriveSortComboBox.SelectedItem.ToString();
+            Settings.Default.DriveSortChoice = DriveSortComboBox.SelectedItem?.ToString() ?? "Vertical";
             Settings.Default.Save();
             var scheduleForm = (ScheduleForm)this.Owner;
             scheduleForm?.ChangeDriveLetterSortingOrder();
