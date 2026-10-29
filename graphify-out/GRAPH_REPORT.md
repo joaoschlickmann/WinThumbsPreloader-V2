@@ -1,17 +1,17 @@
 # Graph Report - winthumbspreloader v3  (2026-10-29)
 
 ## Corpus Check
-- 43 files · ~44,856 words
+- 43 files · ~44,930 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 21 file(s) not represented in the graph (top: .resx 12, (none) 2, .bmp 2)
 
 ## Summary
-- 1076 nodes · 2519 edges · 59 communities (32 shown, 27 thin omitted)
+- 1077 nodes · 2521 edges · 59 communities (36 shown, 23 thin omitted)
 - Extraction: 91% EXTRACTED · 9% INFERRED · 0% AMBIGUOUS · INFERRED: 236 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a74f6f59`
+- Built from commit: `0c7f22a1`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -31,15 +31,17 @@
 - Advanced Cache Settings UI
 - Application Icons & Resources
 - Main Settings Form & Extensions
-- CacheOperationResult
+- .TryAcquire
 - V3 xUnit Test Suite
 - Admin Elevation & Entry Point
+- Form Keyboard Shortcut Handlers
 - Logger
-- Native IProgressDialog COM Interface
-- Backup Folder Path Validation
+- DirectoryScanner
+- CacheOperationResult
+- BackupFolderStatusInfo
 - .NET 10 Project & Dependencies
+- BulkPreset
 - Shell Image Factory Flags
-- LicenseForm
 - BackupFolderStatus
 - Advanced Settings Form & Tabs
 - .GetThumbnail
@@ -48,8 +50,8 @@
 - Log Folder Status Enum
 - Progress Dialog Behavior Flags
 - Shell Display Name Flags
-- Log Folder Validation Result
-- Shared Bitmap COM Interface
+- .GetLogFolderStatusInfo
+- UpdateState
 - Window Long Index Constants
 - IShellItem COM Interface
 - Extension List Sorting Modes
@@ -60,10 +62,9 @@
 - Thumbnail Alpha Channel Types
 - Thumbnail Cache Output Flags
 - Inno Setup Installer & Docs
-- ThreadParentCache
 
 ## God Nodes (most connected - your core abstractions)
-1. `CacheForm` - 127 edges
+1. `CacheForm` - 128 edges
 2. `AdvancedSettingsForm` - 65 edges
 3. `ScheduleForm` - 60 edges
 4. `AdvancedScheduleForm` - 58 edges
@@ -77,83 +78,91 @@
 ## Surprising Connections (you probably didn't know these)
 - `Inno Setup Installer (v3.0.0)` --packages--> `WinThumbsPreloader V3`  [EXTRACTED]
   InnoSetup/installer.iss → README.md
+- `ThumbnailsPreloader` --references--> `DirectoryScanner`  [EXTRACTED]
+  WinThumbsPreloader/WinThumbsPreloader/ThumbnailsPreloader.cs → WinThumbsPreloader/WinThumbsPreloader/DirectoryScanner.cs
 - `BulkPreloaderForm` --defines--> `PresetsFilePath`  [EXTRACTED]
   WinThumbsPreloader/WinThumbsPreloader/Forms/BulkPreloaderForm.Designer.cs → WinThumbsPreloader/WinThumbsPreloader/Forms/BulkPreloaderForm.cs
 - `CacheForm` --defines--> `LocalAppDataBackupPath`  [EXTRACTED]
   WinThumbsPreloader/WinThumbsPreloader/Forms/CacheForm.Designer.cs → WinThumbsPreloader/WinThumbsPreloader/Forms/CacheForm.cs
 - `CacheForm` --defines--> `PortableBackupPath`  [EXTRACTED]
   WinThumbsPreloader/WinThumbsPreloader/Forms/CacheForm.Designer.cs → WinThumbsPreloader/WinThumbsPreloader/Forms/CacheForm.cs
-- `ScheduleForm` --defines--> `Description`  [EXTRACTED]
-  WinThumbsPreloader/WinThumbsPreloader/Forms/ScheduleForm.Designer.cs → WinThumbsPreloader/WinThumbsPreloader/Forms/ScheduleForm.cs
 
 ## Import Cycles
 - None detected.
 
-## Communities (59 total, 27 thin omitted)
+## Communities (59 total, 23 thin omitted)
 
 ### Community 0 - "Task Scheduler Form & Triggers"
 Cohesion: 0.07
 Nodes (3): ScheduleForm, Description, EffectiveDescription
 
 ### Community 2 - "ThumbnailPreloader"
-Cohesion: 0.18
-Nodes (4): Byte16, SIZE, ThumbnailPreloader, WTS_THUMBNAILID
+Cohesion: 0.14
+Nodes (5): Byte16, SIZE, ThreadParentCache, ThumbnailPreloader, WTS_THUMBNAILID
 
 ### Community 3 - "Fact"
 Cohesion: 0.05
-Nodes (17): BulkPreset, MaximumInstances, Method, MultiThreaded, Name, Paths, Recursive, Threads (+9 more)
+Nodes (8): NetworkPathResolver, UNIVERSAL_NAME_INFO, Options, CacheBackupAndLockTests, NetworkPathResolverTests, OptionsTests, PathFormattingTests, PreloaderPipelineIntegrationTests
 
 ### Community 4 - "Application Settings & Properties"
 Cohesion: 0.04
 Nodes (45): Settings, Admin, AutoBackupAfterPreload, AutoBackupInterval, AutoBackupThumbs, AutoDeleteLogsByAge, AutoRestoreInterval, AutoRestoreThumbs (+37 more)
 
 ### Community 5 - "ThumbnailsPreloader"
-Cohesion: 0.06
-Nodes (11): DirectoryScanner, ScannedItem, DirectoryScannerTests, PreloaderPipelineIntegrationTests, ThumbnailsPreloader, ThumbnailsPreloaderState, Canceled, Done (+3 more)
+Cohesion: 0.09
+Nodes (7): ThumbnailsPreloader, ThumbnailsPreloaderState, Canceled, Done, GettingNumberOfItems, New, Processing
 
 ### Community 6 - "Progress Dialog Lifecycle & State"
-Cohesion: 0.07
-Nodes (22): PBM, PBM_SETMARQUEE, PBS, PBS_MARQUEE, ProgressDialog, AutoClose, CancelButton, CancelMessage (+14 more)
+Cohesion: 0.06
+Nodes (23): IProgressDialog, PBM, PBM_SETMARQUEE, PBS, PBS_MARQUEE, ProgressDialog, AutoClose, CancelButton (+15 more)
 
 ### Community 8 - "Log Retention & File Cleanup"
 Cohesion: 0.17
 Nodes (5): LogCleanupResult, BytesFreed, DeletedByAge, FailedDeletes, TotalDeleted
 
 ### Community 9 - "CacheForm"
-Cohesion: 0.10
+Cohesion: 0.07
 Nodes (3): CacheForm, LocalAppDataBackupPath, PortableBackupPath
 
 ### Community 10 - "Core Namespaces & Test Suites"
 Cohesion: 0.10
 Nodes (5): WinThumbsPreloader, WinThumbsPreloader.Properties, WinThumbsPreloader.Tests, WinThumbsPreloader.Forms, NonParallelIntegrationCollection
 
-### Community 11 - "About Form & Update Checker"
-Cohesion: 0.10
-Nodes (6): AboutForm, UpdateState, BetaAvailable, Error, UpdateAvailable, Updated
-
 ### Community 13 - "Application Icons & Resources"
 Cohesion: 0.10
 Nodes (18): Resources, AboutForm_WinThumbsPreloader_BetaVersionAvailable, AboutForm_WinThumbsPreloader_IsUpToDate, AboutForm_WinThumbsPreloader_NewVersionAvailable, AboutForm_WinThumbsPreloader_UpdateCheckFailed, Culture, MainIcon, ResourceManager (+10 more)
 
-### Community 15 - "CacheOperationResult"
-Cohesion: 0.09
-Nodes (16): AcquireResult, Acquired, AlreadyHeldByAnotherProcess, AlreadyHeldByThisProcess, Failed, InvalidPath, PermissionDenied, CacheBackupLock (+8 more)
+### Community 15 - ".TryAcquire"
+Cohesion: 0.15
+Nodes (8): AcquireResult, Acquired, AlreadyHeldByAnotherProcess, AlreadyHeldByThisProcess, Failed, InvalidPath, PermissionDenied, CacheBackupLock
 
 ### Community 21 - "Admin Elevation & Entry Point"
-Cohesion: 0.13
+Cohesion: 0.16
 Nodes (3): PreloaderApplicationContext, Program, AppOptions
 
 ### Community 23 - "Logger"
-Cohesion: 0.12
+Cohesion: 0.16
 Nodes (5): Logger, LastError, LocalAppDataLogPath, LogFrequency, PortableLogPath
 
-### Community 27 - "Backup Folder Path Validation"
-Cohesion: 0.12
+### Community 24 - "DirectoryScanner"
+Cohesion: 0.18
+Nodes (3): DirectoryScanner, ScannedItem, DirectoryScannerTests
+
+### Community 26 - "CacheOperationResult"
+Cohesion: 0.17
+Nodes (8): CacheOperationResult, Exception, Failed, FailureReason, Message, PartiallySucceeded, Status, Succeeded
+
+### Community 27 - "BackupFolderStatusInfo"
+Cohesion: 0.29
 Nodes (6): BackupFolderStatusInfo, CanUseForBackup, IsRunningAsAdmin, Message, NormalizedPath, Status
 
 ### Community 28 - ".NET 10 Project & Dependencies"
 Cohesion: 0.18
 Nodes (10): coverlet.collector (6.0.4), Microsoft.NET.Test.Sdk (17.13.0), TaskScheduler (2.10.1), xunit (2.9.3), xunit.runner.visualstudio (3.0.2), WinThumbsPreloader.Tests, net10.0-windows7.0, Microsoft.NET.Sdk (+2 more)
+
+### Community 29 - "BulkPreset"
+Cohesion: 0.18
+Nodes (9): BulkPreset, MaximumInstances, Method, MultiThreaded, Name, Paths, Recursive, Threads (+1 more)
 
 ### Community 30 - "Shell Image Factory Flags"
 Cohesion: 0.18
@@ -162,6 +171,10 @@ Nodes (11): SIIGBF, SIIGBF_BIGGERSIZEOK, SIIGBF_CROPTOSQUARE, SIIGBF_ICONBACKGRO
 ### Community 32 - "BackupFolderStatus"
 Cohesion: 0.25
 Nodes (8): BackupFolderStatus, InvalidPath, NotSelected, NotWritable, WillBeCreated, WillBeCreatedAdmin, Writable, WritableAdmin
+
+### Community 34 - ".GetThumbnail"
+Cohesion: 0.12
+Nodes (3): ISharedBitmap, IShellItemImageFactory, IThumbnailCache
 
 ### Community 35 - "Windows Thumbnail Extraction Flags"
 Cohesion: 0.20
@@ -183,9 +196,13 @@ Nodes (9): PROGDLG, AutoTime, MarqueeProgress, Modal, NoCancel, NoMinimize, NoPr
 Cohesion: 0.22
 Nodes (9): SIGDN, DESKTOPABSOLUTEEDITING, DESKTOPABSOLUTEPARSING, FILESYSPATH, NORMALDISPLAY, PARENTRELATIVEEDITING, PARENTRELATIVEFORADDRESSBAR, PARENTRELATIVEPARSING (+1 more)
 
-### Community 40 - "Log Folder Validation Result"
-Cohesion: 0.25
-Nodes (7): LogFolderStatusInfo, CanUseForLogging, IsRunningAsAdmin, Message, NormalizedPath, Status, UsesDefaultPath
+### Community 40 - ".GetLogFolderStatusInfo"
+Cohesion: 0.13
+Nodes (8): LogFolderStatusInfo, CanUseForLogging, IsRunningAsAdmin, Message, NormalizedPath, Status, UsesDefaultPath, LoggerTests
+
+### Community 43 - "UpdateState"
+Cohesion: 0.40
+Nodes (5): UpdateState, BetaAvailable, Error, UpdateAvailable, Updated
 
 ### Community 45 - "Window Long Index Constants"
 Cohesion: 0.25
@@ -222,22 +239,22 @@ Nodes (4): WTS_CACHEFLAGS, WTS_CACHED, WTS_DEFAULT, WTS_LOWQUALITY
 ## Knowledge Gaps
 - **235 isolated node(s):** `net10.0-windows7.0`, `coverlet.collector (6.0.4)`, `Microsoft.NET.Test.Sdk (17.13.0)`, `xunit (2.9.3)`, `xunit.runner.visualstudio (3.0.2)` (+230 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 331 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **27 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **23 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `CacheForm` connect `CacheForm` to `Advanced Schedule Configuration UI`, `ThumbnailsPreloader`, `Core Namespaces & Test Suites`, `About Form & Update Checker`, `Advanced Cache Settings UI`, `Main Settings Form & Extensions`, `CacheOperationResult`, `.WriteLine`, `Automated Cache Backup & Polling`, `Explorer Cache Copy & Rollback`, `Win32 Window Handle Interop`, `Admin Elevation & Entry Point`, `Form Keyboard Shortcut Handlers`, `.TryGetBackupPath`, `Backup Folder Path Validation`, `LicenseForm`, `BackupFolderStatus`, `Cache Operation Failure Reasons`, `Form Close Button Handlers`, `FormClosedEventArgs`, `.BackupButton_Click`, `Cache Operation Status Enum`?**
-  _High betweenness centrality (0.184) - this node is a cross-community bridge._
+- **Why does `CacheForm` connect `CacheForm` to `Fact`, `ThumbnailsPreloader`, `Core Namespaces & Test Suites`, `About Form & Update Checker`, `Advanced Cache Settings UI`, `Main Settings Form & Extensions`, `.WriteLine`, `Automated Cache Backup & Polling`, `Explorer Cache Copy & Rollback`, `Admin Elevation & Entry Point`, `Form Keyboard Shortcut Handlers`, `DirectoryScanner`, `CacheOperationResult`, `BackupFolderStatusInfo`, `BackupFolderStatus`, `Cache Operation Failure Reasons`, `.OpenBackupFolder`, `Form Close Button Handlers`, `.TryGetBackupPath`, `.CheckForStartMinimized`, `.notifyIcon1_DoubleClick`, `Cache Operation Status Enum`?**
+  _High betweenness centrality (0.190) - this node is a cross-community bridge._
 - **Are the 3 inferred relationships involving `CacheForm` (e.g. with `.CacheButton_Click()` and `.StartMinimized()`) actually correct?**
   _`CacheForm` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `net10.0-windows7.0`, `coverlet.collector (6.0.4)`, `Microsoft.NET.Test.Sdk (17.13.0)` to the rest of the system?**
   _235 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Task Scheduler Form & Triggers` be split into smaller, more focused modules?**
   _Cohesion score 0.06767676767676768 - nodes in this community are weakly interconnected._
-- **Why does `ProgressDialog` connect `Progress Dialog Lifecycle & State` to `ThumbnailsPreloader`, `Progress Dialog Behavior Flags`, `Core Namespaces & Test Suites`, `Form Close Button Handlers`, `Window Long Index Constants`, `Win32 Window Handle Interop`, `Progress Dialog Timer Actions`, `Progress Dialog Run States`, `Native IProgressDialog COM Interface`, `GWL`?**
-  _High betweenness centrality (0.140) - this node is a cross-community bridge._
+- **Why does `ProgressDialog` connect `Progress Dialog Lifecycle & State` to `ThumbnailsPreloader`, `Progress Dialog Behavior Flags`, `Core Namespaces & Test Suites`, `Form Close Button Handlers`, `Window Long Index Constants`, `Win32 Window Handle Interop`, `Progress Dialog Timer Actions`, `Progress Dialog Run States`?**
+  _High betweenness centrality (0.144) - this node is a cross-community bridge._
 - **Should `Advanced Schedule Configuration UI` be split into smaller, more focused modules?**
-  _Cohesion score 0.05669199298655757 - nodes in this community are weakly interconnected._
-- **Why does `ThumbnailPreloader` connect `ThumbnailPreloader` to `IShellItem`, `.GetThumbnail`, `Windows Thumbnail Extraction Flags`, `ThreadParentCache`, `ThumbnailsPreloader`, `Progress Dialog Lifecycle & State`, `Shell Display Name Flags`, `Shared Bitmap COM Interface`, `Core Namespaces & Test Suites`, `IShellItem COM Interface`, `Win32 Window Handle Interop`, `Thumbnail Alpha Channel Types`, `Thumbnail Cache Output Flags`, `Shell Image Factory Flags`?**
-  _High betweenness centrality (0.106) - this node is a cross-community bridge._
+  _Cohesion score 0.08305647840531562 - nodes in this community are weakly interconnected._
+- **Why does `ThumbnailPreloader` connect `ThumbnailPreloader` to `.GetThumbnail`, `Fact`, `Windows Thumbnail Extraction Flags`, `Progress Dialog Lifecycle & State`, `Shell Display Name Flags`, `Core Namespaces & Test Suites`, `IShellItem COM Interface`, `Win32 Window Handle Interop`, `Thumbnail Alpha Channel Types`, `Logger`, `Thumbnail Cache Output Flags`, `Shell Image Factory Flags`?**
+  _High betweenness centrality (0.107) - this node is a cross-community bridge._
