@@ -6,10 +6,10 @@
     "semantic_hash": "c208ac814870eaa4d81bcb4b7ba57d38"
   },
   "WinThumbsPreloader/WinThumbsPreloader/DirectoryScanner.cs": {
-    "mtime": 1793276718.308241,
-    "seen": 1793276950.8161454,
-    "ast_hash": "10874f1b4b5837684d202b51bb69f0ec",
-    "semantic_hash": "10874f1b4b5837684d202b51bb69f0ec"
+    "mtime": 1793286302.1135242,
+    "seen": 1793292061.6216075,
+    "ast_hash": "bbd5acd060f5cf038bdd1eaa0bd1484a",
+    "semantic_hash": ""
   },
   "WinThumbsPreloader/WinThumbsPreloader/Forms/AboutForm.Designer.cs": {
     "mtime": 1793272848.607699,
@@ -78,9 +78,9 @@
     "semantic_hash": "f9ee3e6e2ff3f0bd673ce6cbdcdabe10"
   },
   "WinThumbsPreloader/WinThumbsPreloader/Forms/CacheForm.cs": {
-    "mtime": 1793281466.0224128,
-    "seen": 1793283422.4341476,
-    "ast_hash": "a31dc88add62098df3506a32cbd3a6c8",
+    "mtime": 1793286739.20261,
+    "seen": 1793292061.6216233,
+    "ast_hash": "c81b04d5b94e13d19cf228aaf492c7a4",
     "semantic_hash": ""
   },
   "WinThumbsPreloader/WinThumbsPreloader/Forms/LicenseForm.Designer.cs": {
@@ -180,15 +180,15 @@
     "semantic_hash": "2dbf60c86a8d739c7f4726295a0f7b53"
   },
   "WinThumbsPreloader/WinThumbsPreloader/ThumbnailPreloader.cs": {
-    "mtime": 1793278771.359474,
-    "seen": 1793283422.4341948,
-    "ast_hash": "e5df86d1c3382464af74dd10fa7aefd5",
+    "mtime": 1793286498.0739148,
+    "seen": 1793292061.6216443,
+    "ast_hash": "5bbe278378d759ff5b1c77153bb0d36b",
     "semantic_hash": ""
   },
   "WinThumbsPreloader/WinThumbsPreloader/ThumbnailsPreloader.cs": {
-    "mtime": 1793281163.5171218,
-    "seen": 1793283422.434198,
-    "ast_hash": "7ec5bd4eeb4b5c3e1489f8133d97a9b0",
+    "mtime": 1793286825.424256,
+    "seen": 1793292061.621646,
+    "ast_hash": "dc43ff3aa398522342a617b0c25d86ec",
     "semantic_hash": ""
   },
   "WinThumbsPreloader/WinThumbsPreloader/WinThumbsPreloader.csproj": {
@@ -264,9 +264,9 @@
     "semantic_hash": "b45a52113803d3b16fc1ca789ef7385e"
   },
   "WinThumbsPreloader/WinThumbsPreloader.Tests/PreloaderPipelineIntegrationTests.cs": {
-    "mtime": 1793281468.2320883,
-    "seen": 1793283422.4341035,
-    "ast_hash": "e56f73c799ed939e759ce4d8a9e4fdd0",
+    "mtime": 1793286861.7708642,
+    "seen": 1793292061.6216016,
+    "ast_hash": "8053fb6af3e4d2e84772c6b68260c141",
     "semantic_hash": ""
   },
   "WinThumbsPreloader/WinThumbsPreloader.Tests/WinThumbsPreloader.Tests.csproj": {
