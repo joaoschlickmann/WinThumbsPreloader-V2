@@ -16,7 +16,6 @@
   "20": "Win32 Window Handle Interop",
   "21": "Admin Elevation & Entry Point",
   "22": "Form Keyboard Shortcut Handlers",
-  "25": "Log File Rotation & Writer",
   "26": "Native IProgressDialog COM Interface",
   "27": "Backup Folder Path Validation",
   "28": ".NET 10 Project & Dependencies",
@@ -31,12 +30,9 @@
   "41": "Shared Bitmap COM Interface",
   "42": "Form Close Button Handlers",
   "45": "Window Long Index Constants",
-  "46": "Backup Folder Validation Result",
   "47": "IShellItem COM Interface",
-  "48": "Scheduler Duration Format Converters",
   "49": "Extension List Sorting Modes",
   "50": "Logging Verbosity Levels",
-  "51": "Application Update States",
   "52": "Cache Operation Status Enum",
   "53": "Progress Dialog Timer Actions",
   "54": "Progress Dialog Run States",
@@ -44,6 +40,5 @@
   "56": "Thumbnail Cache Output Flags",
   "57": "Settings Saving Event Handler",
   "58": "Inno Setup Installer & Docs",
-  "59": "Numeric Input Key Press Filter",
   "60": "Setting Changing Event Handler"
 }
