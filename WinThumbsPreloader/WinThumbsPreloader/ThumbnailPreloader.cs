@@ -98,10 +98,60 @@ namespace WinThumbsPreloader
         public static long CachedHitsCount = 0;
         public static long ExtractedCount = 0;
 
+        private static readonly uint[] StandardThumbCacheBuckets = [16, 32, 48, 96, 256, 768, 1280, 1920, 2560];
+        private static readonly ConcurrentDictionary<uint, uint> ActiveSpilloverMap = new();
+        private static long _lastSpilloverCheckTick;
+
+        /// <summary>
+        /// Resolves the target Windows thumbcache_*.db bucket for a requested thumbnail size.
+        /// When thumbcache_{requestedSize}.db exceeds <see cref="CacheForm.SingleDbSoftLimitBytes"/> (~1.6 GB),
+        /// automatically spills over to the next larger unsaturated Windows bucket (e.g. 256 -> 768 -> 1280)
+        /// so Explorer can serve the thumbnail by downscaling in RAM without hitting the 2 GB 32-bit offset reset limit.
+        /// </summary>
+        internal static uint ResolveSpilloverSize(uint requestedSize, Func<uint, long>? dbSizeProvider = null)
+        {
+            Func<uint, long> getDbSize = dbSizeProvider ?? CacheForm.GetExplorerDbFileSize;
+            if (getDbSize(requestedSize) < CacheForm.SingleDbSoftLimitBytes)
+                return requestedSize;
+
+            foreach (uint candidate in StandardThumbCacheBuckets)
+            {
+                if (candidate <= requestedSize)
+                    continue;
+
+                if (getDbSize(candidate) < CacheForm.SingleDbSoftLimitBytes)
+                    return candidate;
+            }
+
+            return requestedSize;
+        }
+
+        private static uint GetActiveExtractionSize(uint requestedSize)
+        {
+            long now = Environment.TickCount64;
+            long last = Volatile.Read(ref _lastSpilloverCheckTick);
+            if (now - last >= 2000 && Interlocked.CompareExchange(ref _lastSpilloverCheckTick, now, last) == last)
+            {
+                ActiveSpilloverMap.Clear();
+            }
+
+            return ActiveSpilloverMap.GetOrAdd(requestedSize, static s =>
+            {
+                uint resolved = ResolveSpilloverSize(s);
+                if (resolved != s)
+                {
+                    WriteLine($"Spillover active: thumbcache_{s}.db reached 1.6 GB soft ceiling; routing new extractions to thumbcache_{resolved}.db", LoggingFrequency.PreloaderLogging);
+                }
+                return resolved;
+            });
+        }
+
         public static void ResetCounters()
         {
             Interlocked.Exchange(ref CachedHitsCount, 0);
             Interlocked.Exchange(ref ExtractedCount, 0);
+            Interlocked.Exchange(ref _lastSpilloverCheckTick, 0);
+            ActiveSpilloverMap.Clear();
             if (SharedParentPidls.Count > MaxSharedParentPidls)
             {
                 SharedParentPidls.Clear();
@@ -312,11 +362,14 @@ namespace WinThumbsPreloader
                         continue;
                     }
 
-                    // 2. Try fast in-proc extraction first with WTS_SLOWRECLAIM (high retention in thumbcache_idx.db);
+                    // 2. Resolve target bucket (spills over e.g. 256 -> 768 if thumbcache_256.db >= 1.6 GB)
+                    uint extractSize = GetActiveExtractionSize(size);
+
+                    // 3. Try fast in-proc extraction first with WTS_SLOWRECLAIM (high retention in thumbcache_idx.db);
                     // if in-proc fails, fall back to out-of-proc WTS_EXTRACT | WTS_SLOWRECLAIM
                     int hrInProc = tbCache.GetThumbnail(
                         shellItem,
-                        size,
+                        extractSize,
                         WTS_FLAGS.WTS_EXTRACTINPROC | WTS_FLAGS.WTS_SLOWRECLAIM,
                         IntPtr.Zero,
                         out _,
@@ -336,7 +389,7 @@ namespace WinThumbsPreloader
                     {
                         int hrExtract = tbCache.GetThumbnail(
                             shellItem,
-                            size,
+                            extractSize,
                             WTS_FLAGS.WTS_EXTRACT | WTS_FLAGS.WTS_SLOWRECLAIM,
                             IntPtr.Zero,
                             out _,
@@ -354,10 +407,11 @@ namespace WinThumbsPreloader
                     }
                 }
 
-                // 3. Fallback via IShellItemImageFactory (critical for network shares \\server\share, mapped drives, and out-of-proc handlers)
+                // 4. Fallback via IShellItemImageFactory (critical for network shares \\server\share, mapped drives, and out-of-proc handlers)
                 if (!succeeded)
                 {
-                    if (TryExtractViaShellItemImageFactory(shellItem, size, isNetworkPath, out bool wasCacheHit))
+                    uint fallbackSize = GetActiveExtractionSize(size);
+                    if (TryExtractViaShellItemImageFactory(shellItem, fallbackSize, isNetworkPath, out bool wasCacheHit))
                     {
                         if (wasCacheHit)
                             Interlocked.Increment(ref CachedHitsCount);

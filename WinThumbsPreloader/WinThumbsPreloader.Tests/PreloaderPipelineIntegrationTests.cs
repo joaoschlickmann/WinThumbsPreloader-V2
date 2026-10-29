@@ -308,5 +308,22 @@ namespace WinThumbsPreloader.Tests
             Assert.NotNull(key);
             Assert.Equal(0, key!.GetValue("Autorun"));
         }
+
+        [Fact]
+        public void ThumbnailPreloader_ResolveSpilloverSize_RoutesToNextUnsaturatedBucket()
+        {
+            long softLimit = CacheForm.SingleDbSoftLimitBytes;
+
+            // Normal case: 256.db is below 1.6 GB -> stays 256
+            Assert.Equal(256u, ThumbnailPreloader.ResolveSpilloverSize(256, _ => 500L * 1024 * 1024));
+
+            // 256.db is >= 1.6 GB, 768.db is < 1.6 GB -> spills over to 768
+            Assert.Equal(768u, ThumbnailPreloader.ResolveSpilloverSize(256, size =>
+                size == 256 ? softLimit : 100L * 1024 * 1024));
+
+            // Both 256.db and 768.db are >= 1.6 GB -> spills over to 1280
+            Assert.Equal(1280u, ThumbnailPreloader.ResolveSpilloverSize(256, size =>
+                (size == 256 || size == 768) ? softLimit + 1024 : 50L * 1024 * 1024));
+        }
     }
 }
