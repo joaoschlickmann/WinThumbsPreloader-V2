@@ -1018,13 +1018,38 @@ namespace WinThumbsPreloader
                    ((uint)ex.HResult == 0x80070005);
         }
 
+        private static readonly EnumerationOptions DbSizeEnumerationOptions = new()
+        {
+            IgnoreInaccessible = true,
+            AttributesToSkip = 0,
+            RecurseSubdirectories = false
+        };
+
+        private static long SumDbFilesSize(string directoryPath)
+        {
+            var sizes = new System.IO.Enumeration.FileSystemEnumerable<long>(
+                directoryPath,
+                static (ref System.IO.Enumeration.FileSystemEntry entry) => entry.Length,
+                DbSizeEnumerationOptions)
+            {
+                ShouldIncludePredicate = static (ref System.IO.Enumeration.FileSystemEntry entry) =>
+                    !entry.IsDirectory && entry.FileName.EndsWith(".db", StringComparison.OrdinalIgnoreCase)
+            };
+
+            long total = 0;
+            foreach (long len in sizes)
+            {
+                total += len;
+            }
+            return total;
+        }
+
         public static long ExplorerCacheSize()
         {
             long explorerCacheSize = 0;
             try
             {
-                string[] sourceFiles = Directory.GetFiles(explorerPath, "*.db");
-                explorerCacheSize = sourceFiles.Sum(file => new FileInfo(file).Length);
+                explorerCacheSize = SumDbFilesSize(explorerPath);
             }
             catch (Exception e)
             {
@@ -1045,8 +1070,7 @@ namespace WinThumbsPreloader
 
             try
             {
-                string[] destinationFiles = Directory.GetFiles(currentBackupPath, "*.db");
-                backupCacheSize = destinationFiles.Sum(file => new FileInfo(file).Length);
+                backupCacheSize = SumDbFilesSize(currentBackupPath);
             }
             catch (Exception e)
             {

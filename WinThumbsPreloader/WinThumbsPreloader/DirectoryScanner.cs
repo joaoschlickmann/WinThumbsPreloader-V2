@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Enumeration;
 using System.Linq;
 using System.Runtime.Versioning;
 using System.Threading;
@@ -38,11 +39,19 @@ namespace WinThumbsPreloader
         private readonly bool preloadFolderIcons;
         private readonly int threadCount;
         private readonly HashSet<string> thumbnailExtensions;
+        private readonly HashSet<string>.AlternateLookup<ReadOnlySpan<char>> thumbnailExtensionsSpanLookup;
+        private readonly FileSystemEnumerable<bool>.FindPredicate matchFileOnlyPredicate;
+        private readonly FileSystemEnumerable<(string Name, bool IsDirectory)>.FindPredicate includeDirsPredicate;
+        private readonly FileSystemEnumerable<(string Name, bool IsDirectory)>.FindPredicate filesOnlyPredicate;
 
         public DirectoryScanner(string path, bool includeNestedDirectories, bool multiThreaded, int threadCount)
         {
             WriteLine("Initializing Directory Scanner - DirectoryScanner(string, bool, bool, int)", LoggingFrequency.PreloaderLogging);
             thumbnailExtensions = LoadExtensions();
+            thumbnailExtensionsSpanLookup = thumbnailExtensions.GetAlternateLookup<ReadOnlySpan<char>>();
+            matchFileOnlyPredicate = (ref FileSystemEntry entry) => !entry.IsDirectory && ShouldIncludeFileName(entry.FileName);
+            includeDirsPredicate = (ref FileSystemEntry entry) => entry.IsDirectory || ShouldIncludeFileName(entry.FileName);
+            filesOnlyPredicate = (ref FileSystemEntry entry) => !entry.IsDirectory && ShouldIncludeFileName(entry.FileName);
             this.path = NetworkPathResolver.NormalizeAndResolvePath(path) ?? path;
             this.isNetworkPath = NetworkPathResolver.IsNetworkOrMappedPath(this.path);
             this.includeNestedDirectories = includeNestedDirectories;
@@ -151,12 +160,47 @@ namespace WinThumbsPreloader
             return result;
         }
 
-        private bool ShouldIncludeFile(FileSystemInfo file)
+        private bool ShouldIncludeFileName(ReadOnlySpan<char> fileName)
         {
-            string ext = file.Extension;
+            ReadOnlySpan<char> ext = Path.GetExtension(fileName);
 
-            return !string.IsNullOrEmpty(ext) &&
-                   (thumbnailExtensions.Count == 0 || thumbnailExtensions.Contains(ext));
+            return !ext.IsEmpty &&
+                   (thumbnailExtensions.Count == 0 || thumbnailExtensionsSpanLookup.Contains(ext));
+        }
+
+        private bool DirectoryContainsMatchingFile(string directoryPath, EnumerationOptions enumOptions)
+        {
+            var enumerable = new FileSystemEnumerable<bool>(
+                directoryPath,
+                static (ref FileSystemEntry _) => true,
+                enumOptions)
+            {
+                ShouldIncludePredicate = matchFileOnlyPredicate
+            };
+
+            foreach (bool _ in enumerable)
+            {
+                if (cancelled)
+                    return false;
+
+                return true;
+            }
+
+            return false;
+        }
+
+        private FileSystemEnumerable<(string Name, bool IsDirectory)> CreateDirectoryEnumerable(
+            string directoryPath,
+            EnumerationOptions enumOptions,
+            bool includeDirectories)
+        {
+            return new FileSystemEnumerable<(string Name, bool IsDirectory)>(
+                directoryPath,
+                static (ref FileSystemEntry entry) => (entry.FileName.ToString(), entry.IsDirectory),
+                enumOptions)
+            {
+                ShouldIncludePredicate = includeDirectories ? includeDirsPredicate : filesOnlyPredicate
+            };
         }
 
         private void ScanFirstLevelToChannel(ChannelWriter<ScannedItem> writer)
@@ -172,43 +216,30 @@ namespace WinThumbsPreloader
 
             try
             {
-                var rootInfo = new DirectoryInfo(path);
-                string rootFullName = rootInfo.FullName;
+                string rootFullName = Path.GetFullPath(path);
 
-                foreach (FileSystemInfo entry in rootInfo.EnumerateFileSystemInfos("*", enumOptions))
+                foreach (var (name, isDirectory) in CreateDirectoryEnumerable(rootFullName, enumOptions, preloadFolderIcons))
                 {
                     if (cancelled)
                         break;
 
-                    bool isDirectory = (entry.Attributes & FileAttributes.Directory) != 0;
+                    string entryFullName = Path.Join(rootFullName, name);
 
                     if (isDirectory)
                     {
-                        if (!preloadFolderIcons)
-                            continue;
-
-                        var dirInfo = (DirectoryInfo)entry;
-
                         if (preloadAllFolders)
                         {
-                            writer.TryWrite(new ScannedItem(dirInfo.FullName, rootFullName, dirInfo.Name, true, isNetworkPath));
+                            writer.TryWrite(new ScannedItem(entryFullName, rootFullName, name, true, isNetworkPath));
                             Interlocked.Increment(ref totalItemsCount);
                             continue;
                         }
 
                         try
                         {
-                            foreach (FileSystemInfo subFile in dirInfo.EnumerateFiles("*", enumOptions))
+                            if (DirectoryContainsMatchingFile(entryFullName, enumOptions))
                             {
-                                if (cancelled)
-                                    break;
-
-                                if (ShouldIncludeFile(subFile))
-                                {
-                                    writer.TryWrite(new ScannedItem(dirInfo.FullName, rootFullName, dirInfo.Name, true, isNetworkPath));
-                                    Interlocked.Increment(ref totalItemsCount);
-                                    break;
-                                }
+                                writer.TryWrite(new ScannedItem(entryFullName, rootFullName, name, true, isNetworkPath));
+                                Interlocked.Increment(ref totalItemsCount);
                             }
                         }
                         catch (Exception e)
@@ -216,9 +247,9 @@ namespace WinThumbsPreloader
                             WriteLine("Exception thrown while scanning subdirectory: " + e.Message, LoggingFrequency.DebugLogging);
                         }
                     }
-                    else if (ShouldIncludeFile(entry))
+                    else
                     {
-                        writer.TryWrite(new ScannedItem(entry.FullName, rootFullName, entry.Name, false, isNetworkPath));
+                        writer.TryWrite(new ScannedItem(entryFullName, rootFullName, name, false, isNetworkPath));
                         Interlocked.Increment(ref totalItemsCount);
                     }
                 }
@@ -235,7 +266,8 @@ namespace WinThumbsPreloader
 
             var enumOptions = new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = 0 };
             var queue = new Queue<(string FullPath, string? ParentPath, string? FolderName)>();
-            queue.Enqueue((path, Path.GetDirectoryName(path), Path.GetFileName(path)));
+            string rootFullName = Path.GetFullPath(path);
+            queue.Enqueue((rootFullName, Path.GetDirectoryName(rootFullName), Path.GetFileName(rootFullName)));
 
             while (queue.Count > 0 && !cancelled)
             {
@@ -244,20 +276,19 @@ namespace WinThumbsPreloader
 
                 try
                 {
-                    var dirInfo = new DirectoryInfo(currentPath);
-                    string dirFullName = dirInfo.FullName;
-
-                    foreach (FileSystemInfo entry in dirInfo.EnumerateFileSystemInfos("*", enumOptions))
+                    foreach (var (name, isDirectory) in CreateDirectoryEnumerable(currentPath, enumOptions, includeDirectories: true))
                     {
                         if (cancelled) break;
 
-                        if ((entry.Attributes & FileAttributes.Directory) != 0)
+                        string entryFullName = Path.Join(currentPath, name);
+
+                        if (isDirectory)
                         {
-                            queue.Enqueue((entry.FullName, dirFullName, entry.Name));
+                            queue.Enqueue((entryFullName, currentPath, name));
                         }
-                        else if (ShouldIncludeFile(entry))
+                        else
                         {
-                            writer.TryWrite(new ScannedItem(entry.FullName, dirFullName, entry.Name, false, isNetworkPath));
+                            writer.TryWrite(new ScannedItem(entryFullName, currentPath, name, false, isNetworkPath));
                             Interlocked.Increment(ref totalItemsCount);
                             directoryContainsThumbnail = true;
                         }
@@ -283,9 +314,10 @@ namespace WinThumbsPreloader
             WriteLine($"Scanning items for nested directories in parallel (degree={scannerDegree})", LoggingFrequency.PreloaderLogging);
 
             var enumOptions = new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = 0 };
+            string rootFullName = Path.GetFullPath(path);
             using var directoriesToProcess = new BlockingCollection<(string FullPath, string? ParentPath, string? FolderName)>
             {
-                (path, Path.GetDirectoryName(path), Path.GetFileName(path))
+                (rootFullName, Path.GetDirectoryName(rootFullName), Path.GetFileName(rootFullName))
             };
             int pendingWork = 1;
 
@@ -320,10 +352,9 @@ namespace WinThumbsPreloader
 
                         try
                         {
-                            var dirInfo = new DirectoryInfo(currentDir.FullPath);
-                            string dirFullName = dirInfo.FullName;
+                            string dirFullName = currentDir.FullPath;
 
-                            foreach (FileSystemInfo entry in dirInfo.EnumerateFileSystemInfos("*", enumOptions))
+                            foreach (var (name, isDirectory) in CreateDirectoryEnumerable(dirFullName, enumOptions, includeDirectories: true))
                             {
                                 if (cancelled || loopState.ShouldExitCurrentIteration)
                                 {
@@ -332,21 +363,23 @@ namespace WinThumbsPreloader
                                     return;
                                 }
 
-                                if ((entry.Attributes & FileAttributes.Directory) != 0)
+                                string entryFullName = Path.Join(dirFullName, name);
+
+                                if (isDirectory)
                                 {
                                     Interlocked.Increment(ref pendingWork);
                                     try
                                     {
-                                        directoriesToProcess.Add((entry.FullName, dirFullName, entry.Name));
+                                        directoriesToProcess.Add((entryFullName, dirFullName, name));
                                     }
                                     catch (InvalidOperationException)
                                     {
                                         Interlocked.Decrement(ref pendingWork);
                                     }
                                 }
-                                else if (ShouldIncludeFile(entry))
+                                else
                                 {
-                                    writer.TryWrite(new ScannedItem(entry.FullName, dirFullName, entry.Name, false, isNetworkPath));
+                                    writer.TryWrite(new ScannedItem(entryFullName, dirFullName, name, false, isNetworkPath));
                                     Interlocked.Increment(ref totalItemsCount);
                                     directoryContainsThumbnail = true;
                                 }

@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -15,7 +17,8 @@ namespace WinThumbsPreloader
     {
         const int E_ACCESSDENIED = unchecked((int)0x80070005);
         const int RPC_E_DISCONNECTED = unchecked((int)0x80010108);
-        const int MaxCachedParentDirsPerThread = 32;
+        const int MaxCachedParentDirsPerThread = 512;
+        const int MaxSharedParentPidls = 4096;
 
         private static readonly Guid CLSID_LocalThumbnailCache =
             new Guid("50ef4544-ac9f-4a8e-b21b-8a26180db13f");
@@ -32,9 +35,23 @@ namespace WinThumbsPreloader
         private static readonly object ShellParseLock = new();
         private static bool _shellWarmupDone;
 
-        // Per-thread LRU cache of parent directory IShellItem instances (avoids re-parsing deep paths or SMB shares per file)
-        private static readonly ThreadLocal<Dictionary<string, IShellItem>> ThreadLocalParentItems =
-            new ThreadLocal<Dictionary<string, IShellItem>>(() => new Dictionary<string, IShellItem>(StringComparer.OrdinalIgnoreCase));
+        // Cross-thread cache of serialized parent directory ITEMIDLIST (PIDL) byte arrays.
+        // Allows STA workers to instantiate thread-local IShellItem instances via SHCreateItemFromIDList
+        // in sub-microsecond time without acquiring ShellParseLock or re-invoking Shell namespace parsing.
+        private static readonly ConcurrentDictionary<string, byte[]> SharedParentPidls =
+            new ConcurrentDictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+
+        private sealed class ThreadParentCache
+        {
+            public string? LastPath;
+            public IShellItem? LastItem;
+            public readonly Dictionary<string, IShellItem> Items = new(StringComparer.OrdinalIgnoreCase);
+            public readonly Queue<string> EvictionOrder = new();
+        }
+
+        // Per-thread FIFO + 1-slot MRU cache of parent directory IShellItem instances
+        private static readonly ThreadLocal<ThreadParentCache> ThreadLocalParentItems =
+            new ThreadLocal<ThreadParentCache>(() => new ThreadParentCache());
 
         // Legacy single base item fallback
         private static readonly ThreadLocal<(string? basePath, IShellItem? baseItem)> ThreadLocalBaseItem =
@@ -85,6 +102,10 @@ namespace WinThumbsPreloader
         {
             Interlocked.Exchange(ref CachedHitsCount, 0);
             Interlocked.Exchange(ref ExtractedCount, 0);
+            if (SharedParentPidls.Count > MaxSharedParentPidls)
+            {
+                SharedParentPidls.Clear();
+            }
         }
 
         /// <summary>
@@ -94,18 +115,25 @@ namespace WinThumbsPreloader
         {
             try
             {
-                if (ThreadLocalParentItems.IsValueCreated && ThreadLocalParentItems.Value is { Count: > 0 } dict)
+                if (ThreadLocalParentItems.IsValueCreated && ThreadLocalParentItems.Value is { } state)
                 {
-                    foreach (var kvp in dict)
+                    state.LastPath = null;
+                    state.LastItem = null;
+                    state.EvictionOrder.Clear();
+
+                    if (state.Items.Count > 0)
                     {
-                        try
+                        foreach (var kvp in state.Items)
                         {
-                            if (kvp.Value != null && Marshal.IsComObject(kvp.Value))
-                                Marshal.ReleaseComObject(kvp.Value);
+                            try
+                            {
+                                if (kvp.Value != null && Marshal.IsComObject(kvp.Value))
+                                    Marshal.ReleaseComObject(kvp.Value);
+                            }
+                            catch { }
                         }
-                        catch { }
+                        state.Items.Clear();
                     }
-                    dict.Clear();
                 }
 
                 if (ThreadLocalBaseItem.IsValueCreated)
@@ -141,6 +169,17 @@ namespace WinThumbsPreloader
         {
             if (string.IsNullOrWhiteSpace(item.FullPath) || sizes == null || sizes.Length == 0)
                 return;
+
+            // If the item is itself a directory, reuse/populate the cached directory IShellItem directly
+            if (item.IsDirectory)
+            {
+                IShellItem? dirItem = GetOrCreateParentShellItem(item.FullPath, item.ParentDirectory, item.RelativeName);
+                if (dirItem != null)
+                {
+                    ExtractSizesForShellItem(dirItem, item.FullPath, sizes, item.IsNetworkPath);
+                    return;
+                }
+            }
 
             IShellItem? shellItem = null;
             int hrCreate = 0;
@@ -386,6 +425,15 @@ namespace WinThumbsPreloader
         private static bool TryCreateShellItem(string filePath, out IShellItem? shellItem, out int hr)
         {
             shellItem = null;
+            hr = 0;
+
+            if (SharedParentPidls.TryGetValue(filePath, out byte[]? cachedPidl) &&
+                SHCreateItemFromIDList(cachedPidl, IID_IShellItem, out shellItem) >= 0 &&
+                shellItem != null)
+            {
+                return true;
+            }
+
             lock (ShellParseLock)
             {
                 if (!_shellWarmupDone)
@@ -400,9 +448,44 @@ namespace WinThumbsPreloader
                     }
                 }
 
+                if (SharedParentPidls.TryGetValue(filePath, out cachedPidl) &&
+                    SHCreateItemFromIDList(cachedPidl, IID_IShellItem, out shellItem) >= 0 &&
+                    shellItem != null)
+                {
+                    return true;
+                }
+
                 hr = SHCreateItemFromParsingName(filePath, IntPtr.Zero, IID_IShellItem, out shellItem);
+                if (hr >= 0 && shellItem != null)
+                {
+                    TryCacheSharedPidl(filePath, shellItem);
+                }
             }
             return hr >= 0 && shellItem != null;
+        }
+
+        private static void TryCacheSharedPidl(string path, IShellItem item)
+        {
+            if (SharedParentPidls.ContainsKey(path))
+                return;
+
+            if (SHGetIDListFromObject(item, out IntPtr pidl) >= 0 && pidl != IntPtr.Zero)
+            {
+                try
+                {
+                    uint size = ILGetSize(pidl);
+                    if (size > 0 && size <= 65536)
+                    {
+                        byte[] bytes = new byte[size];
+                        Marshal.Copy(pidl, bytes, 0, (int)size);
+                        SharedParentPidls.TryAdd(path, bytes);
+                    }
+                }
+                finally
+                {
+                    Marshal.FreeCoTaskMem(pidl);
+                }
+            }
         }
 
         private static bool TryCreateShellItemFromRelativeName(IShellItem baseItem, string relativePath, out IShellItem? shellItem, out int hr)
@@ -412,29 +495,87 @@ namespace WinThumbsPreloader
             return hr >= 0 && shellItem != null;
         }
 
-        private static IShellItem? GetOrCreateParentShellItem(string parentPath)
+        private static IShellItem? GetOrCreateParentShellItem(
+            string parentPath,
+            string? grandParentPath = null,
+            string? relativeFolderName = null,
+            int depth = 0)
         {
-            var dict = ThreadLocalParentItems.Value;
-            if (dict == null)
+            var state = ThreadLocalParentItems.Value;
+            if (state == null)
                 return null;
 
-            if (dict.TryGetValue(parentPath, out IShellItem? existing) && existing != null)
-                return existing;
+            // 1. Fast 1-slot MRU check for consecutive files in the same folder
+            if (state.LastItem != null && string.Equals(state.LastPath, parentPath, StringComparison.OrdinalIgnoreCase))
+                return state.LastItem;
 
-            if (dict.Count >= MaxCachedParentDirsPerThread)
+            // 2. Per-thread dictionary lookup
+            if (state.Items.TryGetValue(parentPath, out IShellItem? existing) && existing != null)
             {
-                string? oldestKey = null;
-                IShellItem? oldestVal = null;
-                foreach (var kvp in dict)
-                {
-                    oldestKey = kvp.Key;
-                    oldestVal = kvp.Value;
-                    break;
-                }
+                state.LastPath = parentPath;
+                state.LastItem = existing;
+                return existing;
+            }
 
-                if (oldestKey != null)
+            IShellItem? newItem = null;
+            int hr = 0;
+
+            // 3. Cross-thread shared PIDL lookup (zero lock, zero filesystem parse)
+            if (SharedParentPidls.TryGetValue(parentPath, out byte[]? pidlBytes))
+            {
+                hr = SHCreateItemFromIDList(pidlBytes, IID_IShellItem, out newItem);
+            }
+
+            // 4. Hierarchical relative creation from parent directory (avoids full path parsing per subfolder)
+            if (newItem == null && depth < 2)
+            {
+                grandParentPath ??= Path.GetDirectoryName(parentPath);
+                relativeFolderName ??= Path.GetFileName(parentPath);
+
+                if (!string.IsNullOrWhiteSpace(grandParentPath) &&
+                    !string.IsNullOrWhiteSpace(relativeFolderName) &&
+                    !string.Equals(grandParentPath, parentPath, StringComparison.OrdinalIgnoreCase) &&
+                    (depth == 0 || state.Items.ContainsKey(grandParentPath) || SharedParentPidls.ContainsKey(grandParentPath)))
                 {
-                    dict.Remove(oldestKey);
+                    IShellItem? grandParentItem = GetOrCreateParentShellItem(grandParentPath, null, null, depth + 1);
+                    if (grandParentItem != null &&
+                        TryCreateShellItemFromRelativeName(grandParentItem, relativeFolderName, out newItem, out hr) &&
+                        newItem != null)
+                    {
+                        TryCacheSharedPidl(parentPath, newItem);
+                    }
+                }
+            }
+
+            // 5. Fallback to full path parse (with double-checked SharedParentPidls inside ShellParseLock)
+            if (newItem == null)
+            {
+                if (!TryCreateShellItem(parentPath, out newItem, out hr) || newItem == null)
+                {
+                    if (currentLoggingFrequency == LoggingFrequency.DebugLogging)
+                    {
+                        string msg = Marshal.GetExceptionForHR(hr)?.Message ?? "Unknown COM error";
+                        WriteLine($"SHCreateItemFromParsingName failed for parent folder (0x{hr:X8}) '{parentPath}': {msg}", LoggingFrequency.DebugLogging);
+                    }
+                    return null;
+                }
+            }
+
+            CacheParentItemInThreadState(state, parentPath, newItem);
+            return newItem;
+        }
+
+        private static void CacheParentItemInThreadState(ThreadParentCache state, string path, IShellItem item)
+        {
+            while (state.Items.Count >= MaxCachedParentDirsPerThread && state.EvictionOrder.TryDequeue(out string? oldestKey))
+            {
+                if (state.Items.Remove(oldestKey, out IShellItem? oldestVal))
+                {
+                    if (ReferenceEquals(state.LastItem, oldestVal))
+                    {
+                        state.LastPath = null;
+                        state.LastItem = null;
+                    }
                     try
                     {
                         if (oldestVal != null && Marshal.IsComObject(oldestVal))
@@ -444,18 +585,17 @@ namespace WinThumbsPreloader
                 }
             }
 
-            if (!TryCreateShellItem(parentPath, out IShellItem? newItem, out int hr) || newItem == null)
+            if (state.Items.TryAdd(path, item))
             {
-                if (currentLoggingFrequency == LoggingFrequency.DebugLogging)
-                {
-                    string msg = Marshal.GetExceptionForHR(hr)?.Message ?? "Unknown COM error";
-                    WriteLine($"SHCreateItemFromParsingName failed for parent folder (0x{hr:X8}) '{parentPath}': {msg}", LoggingFrequency.DebugLogging);
-                }
-                return null;
+                state.EvictionOrder.Enqueue(path);
+            }
+            else
+            {
+                state.Items[path] = item;
             }
 
-            dict[parentPath] = newItem;
-            return newItem;
+            state.LastPath = path;
+            state.LastItem = item;
         }
 
         private static IShellItem? GetOrCreateBaseShellItem(string basePath)
@@ -499,6 +639,20 @@ namespace WinThumbsPreloader
             [In] IntPtr pbc,
             [In][MarshalAs(UnmanagedType.LPStruct)] Guid riid,
             [Out][MarshalAs(UnmanagedType.Interface, IidParameterIndex = 3)] out IShellItem? ppv);
+
+        [DllImport("shell32.dll")]
+        private static extern int SHGetIDListFromObject(
+            [In, MarshalAs(UnmanagedType.IUnknown)] object punk,
+            out IntPtr ppidl);
+
+        [DllImport("shell32.dll")]
+        private static extern uint ILGetSize(IntPtr pidl);
+
+        [DllImport("shell32.dll")]
+        private static extern int SHCreateItemFromIDList(
+            [In] byte[] pidl,
+            [In, MarshalAs(UnmanagedType.LPStruct)] Guid riid,
+            [Out, MarshalAs(UnmanagedType.Interface, IidParameterIndex = 1)] out IShellItem? ppv);
 
         [DllImport("gdi32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]

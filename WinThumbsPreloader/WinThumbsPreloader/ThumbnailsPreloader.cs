@@ -597,11 +597,20 @@ namespace WinThumbsPreloader
                 {
                     var worker = new Thread(() =>
                     {
+                        long lastCacheCheckTick = Environment.TickCount64;
+                        string lastProcessedPath = null;
                         try
                         {
-                            while (state != ThumbnailsPreloaderState.Canceled &&
-                                   reader.WaitToReadAsync(finishDelayCts.Token).AsTask().GetAwaiter().GetResult())
+                            while (state != ThumbnailsPreloaderState.Canceled)
                             {
+                                ValueTask<bool> waitTask = reader.WaitToReadAsync(finishDelayCts.Token);
+                                bool canRead = waitTask.IsCompletedSuccessfully
+                                    ? waitTask.Result
+                                    : waitTask.AsTask().GetAwaiter().GetResult();
+
+                                if (!canRead)
+                                    break;
+
                                 while (state != ThumbnailsPreloaderState.Canceled &&
                                        reader.TryRead(out ScannedItem item))
                                 {
@@ -612,11 +621,17 @@ namespace WinThumbsPreloader
 
                                     try
                                     {
+                                        lastProcessedPath = item.FullPath;
                                         Volatile.Write(ref currentFile, item.FullPath);
                                         ThumbnailPreloader.PreloadThumbnail(in item, thumbnailSizes);
-                                        if (workerCount == 1)
+                                        if (workerCount == 1 && cacheCheckTimer == null)
                                         {
-                                            CheckCacheReset(item.FullPath);
+                                            long nowTick = Environment.TickCount64;
+                                            if (nowTick - lastCacheCheckTick >= 1000)
+                                            {
+                                                lastCacheCheckTick = nowTick;
+                                                CheckCacheReset(item.FullPath);
+                                            }
                                         }
                                     }
                                     catch (Exception e)
@@ -626,6 +641,11 @@ namespace WinThumbsPreloader
 
                                     Interlocked.Increment(ref processedItemsCount);
                                 }
+                            }
+
+                            if (workerCount == 1 && cacheCheckTimer == null && lastProcessedPath != null && state != ThumbnailsPreloaderState.Canceled)
+                            {
+                                CheckCacheReset(lastProcessedPath);
                             }
                         }
                         catch (OperationCanceledException)

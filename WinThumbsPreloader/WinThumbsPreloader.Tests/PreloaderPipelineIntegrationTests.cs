@@ -227,5 +227,68 @@ namespace WinThumbsPreloader.Tests
             var ex = Record.Exception(() => tickMethod!.Invoke(form, [null, EventArgs.Empty]));
             Assert.Null(ex);
         }
+
+        [Fact]
+        public async Task ThumbnailPreloader_InterleavedManyDirectories_ReusesParentShellItemsWithoutThrashing()
+        {
+            // Regression test guarding against parent IShellItem cache thrashing when > 32 folders
+            // are interleaved on an STA worker thread, as well as relative subfolder resolution.
+            const int folderCount = 40;
+            var items = new ScannedItem[folderCount * 2];
+            using (var bmp = new Bitmap(16, 16))
+            {
+                for (int i = 0; i < folderCount; i++)
+                {
+                    string subName = $"dir_{i:D3}";
+                    string subPath = Path.Combine(_tempDir, subName);
+                    Directory.CreateDirectory(subPath);
+                    string f1 = Path.Combine(subPath, "a.bmp");
+                    string f2 = Path.Combine(subPath, "b.bmp");
+                    bmp.Save(f1, ImageFormat.Bmp);
+                    bmp.Save(f2, ImageFormat.Bmp);
+
+                    // Interleave across all 40 folders so consecutive items never share the same folder
+                    items[i] = new ScannedItem(f1, subPath, "a.bmp", IsDirectory: false, IsNetworkPath: false);
+                    items[folderCount + i] = new ScannedItem(f2, subPath, "b.bmp", IsDirectory: false, IsNetworkPath: false);
+                }
+            }
+
+            ThumbnailPreloader.ResetCounters();
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var staThread = new Thread(() =>
+            {
+                try
+                {
+                    for (int i = 0; i < items.Length; i++)
+                    {
+                        ThumbnailPreloader.PreloadThumbnail(in items[i], [96]);
+                    }
+                    ThumbnailPreloader.CleanupCurrentThreadComObjects();
+                    tcs.TrySetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+            })
+            {
+                IsBackground = true
+            };
+            staThread.SetApartmentState(ApartmentState.STA);
+            staThread.Start();
+
+            await tcs.Task;
+
+            long totalProcessed = Interlocked.Read(ref ThumbnailPreloader.CachedHitsCount) +
+                                  Interlocked.Read(ref ThumbnailPreloader.ExtractedCount);
+            Assert.Equal(items.Length, totalProcessed);
+        }
+
+        [Fact]
+        public void CacheForm_ExplorerCacheSize_ReturnsNonNegativeSizeWithoutException()
+        {
+            long size = CacheForm.ExplorerCacheSize();
+            Assert.True(size >= 0);
+        }
     }
 }
